@@ -1,6 +1,6 @@
 #include "./common/common.hpp"
 #include "./common/jacobi_reference.hpp"
-#include "config.h"
+#include "config.cuh"
 #include <cassert>
 #include <cstdio>
 
