@@ -1,5 +1,6 @@
 #include "./common/common.hpp"
 #include "./common/jacobi_reference.hpp"
+#include "./common/jacobi_cuda.cuh"
 #include "config.cuh"
 #include <cassert>
 #include <cstdio>
@@ -49,10 +50,14 @@ int main(int argc, char const *argv[])
     getZero2DArray<REAL>(width_y, width_x);
   REAL (*output_gold)[width_x] = (REAL (*)[width_x])
     getZero2DArray<REAL>(width_y, width_x);
-
+#ifdef REFCHECK
   jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
   jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
-  
+#else
+  jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+  jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+#endif
+
   int halo=HALO*iteration;
 
   REAL error =

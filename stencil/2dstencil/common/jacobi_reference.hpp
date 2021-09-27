@@ -12,9 +12,6 @@ void jacobi_gold(REAL*, int, int, REAL*);
 template<class REAL>
 void jacobi_gold_iterative(REAL*, int, int, REAL*, int );
 
-//this is where the aimed implementation located
-template<class REAL>
-void jacobi_iterative(REAL*, int, int, REAL*, int );
 
 #define PERKS_DECLARE_INITIONIZATION_REFERENCE(_type) \
     void jacobi_gold(_type*,int,int,_type*);
