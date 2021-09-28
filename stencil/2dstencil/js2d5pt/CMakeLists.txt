@@ -29,7 +29,7 @@ set_target_properties(${reference_goal} PROPERTIES
 set(archlist " -gencode arch=compute_80,code=sm_80 ")
 string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
 
-set(DEFAULT_COMPILER_FLAG "")
+set(DEFAULT_COMPILER_FLAG "-D_TIMER_ -DWARMUPRUN -Xptxas \"-v -dlcm=cg\"")
 string(APPEND DEFAULT_COMPILER_FLAG "${archlist}")
 
 function(subcompile prefix default_compiler_flag aim)
@@ -76,6 +76,7 @@ endfunction()
 subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
 subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
 subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
 
 #subcompile(type DEFAULT_COMPILER_FLAG "BASELINE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen)
 #subcompile(${type} DEFAULT_COMPILER_FLAG "NAIVE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen )
