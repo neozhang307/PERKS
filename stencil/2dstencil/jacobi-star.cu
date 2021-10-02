@@ -499,26 +499,26 @@ __global__ void kernel2d_restrict(REAL* input,
   _Pragma("unroll") 
   for(int hl=0; hl<Halo; hl++)
   {
-    sum+=south[Halo-1-hl]*input[s[Halo-1-hl]];
+    sum+=south[hl]*input[s[hl]];
   }
    
   _Pragma("unroll") 
   for(int hl=0; hl<Halo; hl++)
   {
-    sum+=west[Halo-1-hl]*input[w[Halo-1-hl]];
+    sum+=west[hl]*input[w[hl]];
   }
   sum+=center*input[c];
    
   _Pragma("unroll") 
   for(int hl=0; hl<Halo; hl++)
   {
-    sum+=east[Halo-1-hl]*input[e[Halo-1-hl]];
+    sum+=east[hl]*input[e[hl]];
   }
    
   _Pragma("unroll") 
   for(int hl=0; hl<Halo; hl++)
   {
-    sum+=north[Halo-1-hl]*input[n[Halo-1-hl]];
+    sum+=north[hl]*input[n[hl]];
   }
   output[c]=sum;
 
@@ -658,11 +658,11 @@ size_t executeSM=0;
   dim3 executeGridDim=grid_dim;
 #endif 
 #ifdef NAIVE
-  dim3 block_dim_1(MIN(width_x,256),1);
-  dim3 grid_dim_1(width_x/MIN(width_x,256),width_y/1);
+  dim3 block_dim_1(MIN(width_x,bdim_x),1);
+  dim3 grid_dim_1(width_x/MIN(width_x,bdim_x),width_y/1);
 
   dim3 executeBlockDim=block_dim_1;
-  dim3 executeGridDim=block_dim_1;
+  dim3 executeGridDim=grid_dim_1;
 #endif
 #ifdef BASELINE
   dim3 block_dim2(bdim_x);

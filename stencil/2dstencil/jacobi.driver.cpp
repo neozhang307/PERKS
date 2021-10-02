@@ -65,7 +65,7 @@ int main(int argc, char const *argv[])
 #ifdef REFCHECK
   int halo=HALO*iteration;
 #else
-  int halo=0;
+  int halo=HALO*iteration;
 #endif
   REAL error =
     checkError2D<REAL>
