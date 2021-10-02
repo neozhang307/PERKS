@@ -41,7 +41,11 @@ int main(int argc, char const *argv[])
   int width_y;
   int iteration;
   width_x=width_y=4096;
+#ifdef REFCHECK
   iteration=4;
+#else
+  iteration=3;
+#endif
   #define REAL float
   
   REAL (*input)[width_x] = (REAL (*)[width_x])
@@ -58,8 +62,11 @@ int main(int argc, char const *argv[])
   jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
 #endif
 
+#ifdef REFCHECK
   int halo=HALO*iteration;
-
+#else
+  int halo=0;
+#endif
   REAL error =
     checkError2D<REAL>
     (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);

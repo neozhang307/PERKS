@@ -201,6 +201,57 @@ do{\
   }\
 }while(0)
 
+template<class REAL, int RTILING, int halo>
+__device__ void __forceinline__ computation(REAL result[RTILING], 
+                                            REAL* sm_ptr, int sm_y_base, int sm_x_ind,int sm_width, 
+                                            REAL r_ptr[RTILING+2*halo], int reg_base, 
+                                            const REAL west[6],const REAL east[6], 
+                                            const REAL north[6],const REAL south[6],
+                                            const REAL center 
+                                          )
+{
+  _Pragma("unroll")
+  for(int hl=0; hl<halo; hl++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<RTILING ; l_y++)
+    {
+      result[l_y]+=sm_ptr[(l_y+sm_y_base)*sm_width+sm_x_ind-1-hl]*west[hl];
+    }
+  }
+  _Pragma("unroll")
+  for(int hl=0; hl<halo; hl++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<RTILING ; l_y++)
+    {
+      result[l_y]+=r_ptr[reg_base+l_y+halo-1-hl]*south[hl];
+    }
+  }
+  _Pragma("unroll")
+  for(int l_y=0; l_y<RTILING ; l_y++)
+  {
+    result[l_y]+=r_ptr[reg_base+l_y+halo]*center;
+  }
+  _Pragma("unroll")
+  for(int hl=0; hl<halo; hl++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<RTILING ; l_y++)
+    {
+      result[l_y]+=r_ptr[reg_base+l_y+halo+1+hl]*north[hl];
+    }
+  }
+  _Pragma("unroll")
+  for(int hl=0; hl<halo; hl++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<RTILING ; l_y++)
+    {
+      result[l_y]+=sm_ptr[(l_y+sm_y_base)*sm_width+sm_x_ind+1+hl]*east[hl];
+    }
+  }
+}
 
 
 // init register array of ARRAY
@@ -221,7 +272,7 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
                                               int global_y, int global_y_end,
                                               int p_x, int width_x,
                                               int tid, int local_x,
-                                              int ps_y, int ps_x)
+                                              int ps_y, int ps_x, int sm_width)
 {
   //fill shared memory buffer
   _Pragma("unroll")
@@ -239,7 +290,7 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
     }
     
   
-    int dst_ind=(l_y+ps_y)*TILE_SM_X;
+    int dst_ind=(l_y+ps_y)*sm_width;
     
     #ifndef DA100X
       sm_buffer[dst_ind-Halo+local_x+ps_x]=src[l_global_y * width_x + MAX(p_x-Halo+local_x,0)];
@@ -303,12 +354,12 @@ template<class REAL, int START, int END, int SIZE>
 __device__ void __forceinline__ sm2reg(REAL reg_array[SIZE], REAL* sm_buffer,
                                       int y_base, 
                                       int x_base, int x_id,
-                                      int x_width)
+                                      int sm_width)
 {
   _Pragma("unroll")
   for(int l_y=START; l_y<END ; l_y++)
   {
-    reg_array[l_y] = sm_buffer[(l_y+y_base)*x_width+x_base+x_id];//input[(global_y) * width_x + global_x];
+    reg_array[l_y] = sm_buffer[(l_y+y_base)*sm_width+x_base+x_id];//input[(global_y) * width_x + global_x];
   }
 }
 
@@ -323,7 +374,7 @@ __device__ void __forceinline__ sm2reg(REAL reg_array[SIZE], REAL* sm_buffer,
 
 template<class REAL>
 #ifdef PERSISTENT
-__global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int width_x, 
+__global__ void kernel_persistent_baseline(REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__,REAL * __restrict__ l2_cache=NULL, REAL * __restrict__ l2_cachetmp=NULL, 
   int iteration=0)
 #else
@@ -367,7 +418,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
                                             p_y, width_y,
                                             p_x, width_x,
                                             tid, tid,
-                                            ps_y, ps_x);
+                                            ps_y, ps_x,TILE_SM_X);
 
     //computation of register space 
     for(int global_y=p_y; global_y<p_y_end; global_y+=RTILE_Y)
@@ -377,7 +428,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
                                             global_y, width_y,
                                             p_x, width_x,
                                             tid, tid,
-                                            ps_y, ps_x);
+                                            ps_y, ps_x,TILE_SM_X);
 
       __syncthreads();
       //shared memory buffer -> register buffer
@@ -389,8 +440,14 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
       REAL sum[RTILE_Y];
       init_reg_array<REAL,RTILE_Y>(sum,0);
       //main computation
-      COMPUTE2(sm_rbuffer,0,r_smbuffer,0);
- 
+      //COMPUTE2(sm_rbuffer,0,r_smbuffer,0);
+      
+      computation<REAL,RTILE_Y,Halo>(sum,
+                                      sm_rbuffer, ps_y, local_x+ps_x, TILE_SM_X,
+                                      r_smbuffer, 0,
+                                      west, east,
+                                      north,south,  center);
+
       //store to global
       reg2global<REAL,RTILE_Y>(sum, __var_4__, 
                   global_y,p_y_end, 
@@ -488,7 +545,10 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 
 
 //initialization
-#if defined(BASELINE_CM)||defined(BASELINE)||defined(PERSISTENT)
+#if defined(PERSISTENT)
+  auto execute_kernel = kernel_persistent_baseline<REAL>;
+#endif
+#if defined(BASELINE_CM)||defined(BASELINE)
   auto execute_kernel = kernel_baseline<REAL>;
 #endif
 #ifdef NAIVE
@@ -835,7 +895,7 @@ size_t executeSM=0;
 #endif
 
 #if defined(GEN) || defined(PERSISTENT)
-if(iteration%2==1)
+  if(iteration%2==1)
     cudaMemcpy(__var_0__,__var_2__, sizeof(REAL)*((width_y-0)*(width_x-0)), cudaMemcpyDeviceToHost);
   else
     cudaMemcpy(__var_0__,input, sizeof(REAL)*((width_y-0)*(width_x-0)), cudaMemcpyDeviceToHost);
