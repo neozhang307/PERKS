@@ -64,27 +64,41 @@ namespace cg = cooperative_groups;
 
 void Check_CUDA_Error(const char* message);
 
+//direction of x axle is the same as thread index
+//basic tiling: tiling unit for single thread
 #ifndef RTILE_Y
 #define RTILE_Y (8)
 #endif
-
-#ifndef SFOLDER_Y
-#define SFOLDER_Y (2)
-#endif
-#ifndef RFOLDER_Y
-#define RFOLDER_Y (9)
+#ifndef TILE_X
+#define TILE_X (256)
 #endif
 
-#define TSTILE_Y (RTILE_Y*SFOLDER_Y)
-#define TRTILE_Y (RTILE_Y*RFOLDER_Y)
-#define TILE_Y (TSTILE_Y+TRTILE_Y)
+#define BASIC_TILE_X (TILE_X+2*Halo)
+#define BASIC_TILE_Y (RTILE_Y+2*Halo)
+#define BASIC_SM_SPACE (BASIC_TILE_X)*(BASIC_TILE_Y)
+/*********************ARGUMENTS for PERKS*******************************/
+// Here "Folder" means how many times of "tiling unit" is stored in given memory structure
+// Shared Memory folder of basic tiling
+#ifndef SM_FOLER_Y
+#define SM_FOLER_Y (2)
+#endif
+// Register Files folder of basic tiling
+#ifndef REG_FOLER_Y
+#define REG_FOLER_Y (6)
+#endif
+// Total 
+#define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
+#define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLER_Y)
+#define TOTAL_SM_CACHE_SPACE (TILE_X+2*Halo)*(TOTAL_SM_TILE_Y+2*Halo)
 
-#define FOLDER (1)
+
+
+#define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
 
 #define bdim_x (TILE_X)
 
-#define TILE_SM_X (TILE_X+Halo*2)
-#define TILE_SM_Y (TSTILE_Y+Halo*2)
+#define TILE_BASIC_TILE_X (TILE_X+Halo*2)
+#define TILE_SM_Y (TOTAL_SM_TILE_Y+Halo*2)
 
 
 #define BOULDER_STEP (Halo*2*(TILE_Y+TILE_X))
@@ -164,7 +178,7 @@ do{\
     _Pragma("unroll")\
     for(int l_y=0; l_y<RTILE_Y ; l_y++)\
     {\
-      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*TILE_SM_X+local_x+ps_x-1-hl]*west[hl];\
+      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*TILE_BASIC_TILE_X+local_x+ps_x-1-hl]*west[hl];\
     }\
   }\
   _Pragma("unroll")\
@@ -196,7 +210,7 @@ do{\
     _Pragma("unroll")\
     for(int l_y=0; l_y<RTILE_Y ; l_y++)\
     {\
-      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*TILE_SM_X+local_x+ps_x+1+hl]*east[hl];\
+      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*TILE_BASIC_TILE_X+local_x+ps_x+1+hl]*east[hl];\
     }\
   }\
 }while(0)
@@ -363,12 +377,568 @@ __device__ void __forceinline__ sm2reg(REAL reg_array[SIZE], REAL* sm_buffer,
   }
 }
 
-//__constant__ REAL center=15.0/118;
-//__constant__ REAL west[6]={12.0/118,9.0/118,3.0/118,2.0/118,5.0/118,6.0/118};
-//__constant__ REAL east[6]={12.0/118,9.0/118,3.0/118,3.0/118,4.0/118,6.0/118};
-//__constant__ REAL north[6]={5.0/118,7.0/118,5.0/118,4.0/118,3.0/118,2.0/118};
-//__constant__ REAL south[6]={5.0/118,7.0/118,5.0/118,1.0/118,6.0/118,2.0/118};
+#ifdef GEN
+template<class REAL>
+__global__ void kernel_general(REAL * __restrict__ input, int width_y, int width_x, 
+  REAL * __restrict__ __var_4__, 
+  REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
+  int iteration)
+{
+  stencilParaT;
+  //basic pointer
+  cg::grid_group gg = cg::this_grid();
+  //extern __shared__ REAL sm[];
+  extern __shared__ char sm[];
+  #if SM_FOLER_Y!=0
+    //shared memory buffer space
+    REAL* sm_space = (REAL*)sm+1;
 
+    //shared memory buffer for register computation
+    REAL* sm_rbuffer = sm_space + TOTAL_SM_CACHE_SPACE;
+  #else
+    REAL* sm_rbuffer = (REAL*)sm + 1;
+  #endif
+
+  register REAL* sm_rbuffers[2*Halo+RTILE_Y];
+  sm_rbuffers[0]=sm_rbuffer;
+  // _Pragma("unroll") 
+  for(int lr=1; lr<2*Halo+RTILE_Y;lr++)
+  {
+    sm_rbuffers[lr]=sm_rbuffers[lr-1]+(bdim_x+2*Halo);
+  }
+
+  //boundary space
+  REAL* boundary_buffer = sm_rbuffer + BASIC_SM_SPACE;
+
+  //register buffer for shared memory c
+  //register buffer space
+  #if REG_FOLER_Y!=0
+    register REAL r_space[REG_FOLER_Y*RTILE_Y+2*Halo];
+  #endif
+  register REAL r_smbuffer[2*Halo+RTILE_Y];
+
+
+  const int tid = threadIdx.x;
+  // int ps_x = Halo + tid;
+  const int ps_y = Halo;
+  const int ps_x = Halo;
+
+  const int p_x = blockIdx.x * TILE_X ;
+
+  int blocksize_y=(width_y/gridDim.y);
+  int y_quotient = width_y%gridDim.y;
+
+  const int p_y =  blockIdx.y * (blocksize_y) + (blockIdx.y<=y_quotient?blockIdx.y:y_quotient);
+  blocksize_y += (blockIdx.y<y_quotient?1:0);
+  const int p_y_cache = p_y + (blocksize_y-TOTAL_REG_TILE_Y-TOTAL_SM_TILE_Y);
+
+  //load data global to register
+  // #pragma unroll
+  #if REG_FOLER_Y !=0
+    _Pragma("unroll")
+    for (int l_y = 0; l_y < TOTAL_REG_TILE_Y ; l_y++) 
+    {
+      int local_y = l_y;
+        /* code */
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int local_x=tid; local_x<TILE_X; local_x+=bdim_x)
+      {
+        r_space[l_y+Halo] =  input[(local_y+p_y_cache) * width_x + p_x + local_x];
+      }
+    }
+  #endif
+  // load data global to sm
+  // #pragma unroll
+
+  #if SM_FOLER_Y != 0
+    _Pragma("unroll")
+    for (int l_y = 0; l_y < TOTAL_SM_TILE_Y&&l_y+TOTAL_REG_TILE_Y+p_y_cache<width_y ; l_y++) 
+    {
+      int local_y=l_y+TOTAL_REG_TILE_Y;
+        /* code */
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int local_x=tid; local_x<TILE_X; local_x+=bdim_x)
+      {
+        sm_space[(ps_y + l_y) * BASIC_TILE_X + local_x + Halo] =  input[(local_y+p_y_cache) * width_x + p_x + local_x];
+      }
+    }
+  #endif
+  #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
+    for(int local_y=tid; local_y<TILE_Y&&p_y_cache + local_y<width_y; local_y+=bdim_x)
+    {
+      // #pragma unroll
+      // _Pragma("unroll")
+      for(int l_x=0; l_x<Halo; l_x++)
+      {
+        //east
+        int global_x = p_x + TILE_X + l_x;
+        global_x = MIN(width_x-1,global_x);
+        boundary_buffer[E_STEP+local_y + l_x*TILE_Y] = input[(p_y_cache + local_y) * width_x + global_x];
+        //west
+        global_x = p_x - Halo + l_x;
+        global_x = MAX(0,global_x);
+        boundary_buffer[W_STEP+local_y + l_x*TILE_Y] =  input[(p_y_cache + local_y) * width_x + global_x];
+      }
+    }
+    // sdfa
+  #endif
+  __syncthreads();
+
+
+  for(int iter=0; iter<iteration; iter++)
+  {
+    int local_x=tid;
+    //prefetch the boundary data
+    //north south
+    {
+      //register
+      #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<Halo; l_y++)
+        {
+          int global_y = (p_y_cache-Halo+l_y);
+          global_y=MAX(0,global_y);
+          //south
+          #if REG_FOLER_Y != 0
+            r_space[l_y]=input[(global_y) * width_x + p_x + tid];//boundary_buffer[S_STEP+tid + l_y*TILE_X];//sm_space[(ps_y+TOTAL_SM_TILE_Y-1) * BASIC_TILE_X + tid + ps_x];
+          #else
+            sm_space[(ps_y - Halo+l_y) * BASIC_TILE_X + tid + ps_x]=input[(global_y) * width_x + p_x + tid];
+          #endif
+        }
+          //SM region
+          // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<Halo; l_y++)
+        {
+          int global_y=(p_y_cache+(TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)+l_y);
+          global_y=MIN(global_y,width_y-1);
+          //north
+          #if SM_FOLER_Y != 0
+            sm_space[(ps_y +TOTAL_SM_TILE_Y + l_y) * BASIC_TILE_X + tid + ps_x]=(input[(global_y) * width_x + p_x + tid]);//boundary_buffer[N_STEP+tid+l_y*TILE_X];
+          #else
+            r_space[TOTAL_REG_TILE_Y+Halo+l_y]=(input[(global_y) * width_x + p_x + tid]);
+          #endif
+        }
+      #endif
+      //NS of register & SM
+      //*******************
+      // #pragma unroll
+      #if SM_FOLER_Y !=0 && REG_FOLER_Y !=0
+        _Pragma("unroll")
+        for(int l_y=0; l_y<Halo; l_y++)
+        {
+          //north of register
+          r_space[TOTAL_REG_TILE_Y+Halo+l_y]=sm_space[(ps_y+l_y) * BASIC_TILE_X + tid + ps_x];//boundary_buffer[N_STEP+tid];
+          //south of sm
+          sm_space[(ps_y - Halo+l_y) * BASIC_TILE_X + tid + ps_x]=r_space[TOTAL_REG_TILE_Y+l_y];//boundary_buffer[S_STEP+tid];
+        }
+      #endif
+
+    }
+    //computation of general space 
+    for(int global_y=p_y; global_y<p_y_cache; global_y+=RTILE_Y)
+    {
+      if(global_y==p_y)
+      {
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=-Halo; l_y<Halo; l_y++)
+        {
+          int l_global_y=(MAX(p_y+l_y,0));
+          // global_y=(MAX(global_y,0));
+          #ifndef DA100X
+            sm_rbuffers[(l_y+ps_y)][-Halo+tid+ps_x]=input[(l_global_y) * width_x + MAX(p_x-Halo+tid,0)];
+            if(tid<Halo*2)
+              sm_rbuffers[(l_y+ps_y)][-Halo+tid+bdim_x+ps_x]=input[(l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)];
+          #else
+            // sm_rbuffer[(l_y+ps_y)*(bdim_x+2*Halo)-Halo+tid+ps_x]=input[(l_global_y) * width_x + MAX(p_x-Halo+tid,0)];
+            __pipeline_memcpy_async(sm_rbuffers[(l_y+ps_y)]-Halo+tid+ps_x, 
+                    input + (l_global_y) * width_x + MAX(p_x-Halo+tid,0)
+                      , sizeof(REAL));
+            if(tid<Halo*2)
+            {
+              // sm_rbuffer[(l_y+ps_y)*(bdim_x+2*Halo)-Halo+tid+bdim_x+ps_x]=input[(l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)];
+              __pipeline_memcpy_async(sm_rbuffers[(l_y+ps_y)]-Halo+tid+bdim_x+ps_x, 
+                    input + (l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)
+                      , sizeof(REAL));
+            }
+          #endif
+        }
+        // #ifdef DA100X
+        //   __pipeline_commit();
+        //   __pipeline_wait_prior(0);
+        // #endif
+      }
+
+      {
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=Halo; l_y<RTILE_Y+Halo; l_y++)
+        {
+          int l_global_y=(MIN(global_y+l_y,width_y-1));
+          l_global_y=(MAX(l_global_y,0));
+          #ifndef DA100X
+            sm_rbuffers[(l_y+ps_y)][-Halo+tid+ps_x]=input[l_global_y * width_x + MAX(p_x-Halo+tid,0)];
+            if(tid<Halo*2)
+              sm_rbuffers[(l_y+ps_y)][-Halo+tid+bdim_x+ps_x]=input[(l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)];
+          #else
+            // sm_rbuffer[(l_y+ps_y)*BASIC_TILE_X-Halo+tid+ps_x]=input[l_global_y * width_x + MAX(p_x-Halo+tid,0)];
+            __pipeline_memcpy_async(sm_rbuffers[(l_y+ps_y)]-Halo+tid+ps_x, 
+                    input + l_global_y * width_x + MAX(p_x-Halo+tid,0)
+                      , sizeof(REAL));
+            if(tid<Halo*2)
+            {  
+              // sm_rbuffer[(l_y+ps_y)*BASIC_TILE_X-Halo+tid+bdim_x+ps_x]=input[(l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)];
+              __pipeline_memcpy_async(sm_rbuffers[(l_y+ps_y)]-Halo+tid+bdim_x+ps_x, 
+                      input + (l_global_y) * width_x + MIN(-Halo+tid+bdim_x+p_x,width_x-1)
+                        , sizeof(REAL));
+            }
+          #endif
+        }
+      }
+      #ifdef DA100X
+        __pipeline_commit();
+        __pipeline_wait_prior(0);
+      #endif
+      __syncthreads();
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int l_y=-Halo; l_y<RTILE_Y+Halo ; l_y++)
+      {
+        r_smbuffer[l_y+Halo] = sm_rbuffers[(l_y+ps_y)][tid+ps_x];//input[(global_y) * width_x + global_x];
+      }
+
+      REAL sum[RTILE_Y];
+
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int l_y=0; l_y<RTILE_Y ; l_y++)
+      {
+        sum[l_y]=0;
+      }
+      // COMPUTE2();
+      COMPUTE(sm_rbuffers,0,r_smbuffer,0);
+      {
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<RTILE_Y; l_y++)
+        {
+          int l_global_y=global_y+l_y;
+          if(l_global_y>=p_y_cache)
+          {
+            break;
+          }
+          __var_4__[(l_global_y) * width_x + p_x+tid]=sum[l_y];//r_smbuffer[l_y];
+        
+        }
+      }
+      __syncthreads();
+      #if REG_FOLER_Y !=0
+        #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=-Halo; l_y<Halo; l_y++)
+        {
+          sm_rbuffer[(l_y+ps_y)*(bdim_x+2*Halo)-Halo+tid+ps_x]=sm_rbuffer[(l_y+ps_y+RTILE_Y)*(bdim_x+2*Halo)-Halo+tid+ps_x];
+          if(tid<Halo*2)
+            sm_rbuffer[(l_y+ps_y)*(bdim_x+2*Halo)-Halo+tid+bdim_x+ps_x]=sm_rbuffer[(l_y+ps_y+RTILE_Y)*(bdim_x+2*Halo)-Halo+tid+bdim_x+ps_x];        
+        }
+        __syncthreads();
+      #else
+        for(int l_y=-Halo; l_y<Halo; l_y++)
+        {
+          REAL *tmp_ptr=sm_rbuffers[(l_y+ps_y)];
+          sm_rbuffers[(l_y+ps_y)]=sm_rbuffers[(l_y+ps_y+RTILE_Y)];
+          sm_rbuffers[(l_y+ps_y+RTILE_Y)]=tmp_ptr;
+        }
+      #endif
+      // 
+    }
+
+    //computation of register space
+    // #pragma unroll
+    #if REG_FOLER_Y !=0
+      _Pragma("unroll")
+      for(int local_y=0; local_y<TOTAL_REG_TILE_Y; local_y+=RTILE_Y)
+      {
+        //load data sm to buffer register
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=tid; l_y<RTILE_Y; l_y+=bdim_x)
+        {
+          // #pragma unroll
+          _Pragma("unroll")
+          for(int l_x=0; l_x<Halo; l_x++)
+          {
+            // east
+            sm_rbuffer[(l_y)*BASIC_TILE_X+TILE_X + ps_x + l_x]=boundary_buffer[E_STEP+ l_y+local_y  + l_x*TILE_Y];
+            // west
+            sm_rbuffer[(l_y)*BASIC_TILE_X+(-Halo) + ps_x + l_x]=boundary_buffer[W_STEP+l_y+local_y + l_x*TILE_Y];
+          }
+        }
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<RTILE_Y ; l_y++)
+        {
+          sm_rbuffer[(l_y)*BASIC_TILE_X+Halo +local_x]=r_space[l_y+local_y+Halo];
+        }
+        __syncthreads();
+        REAL sum[RTILE_Y];
+        
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<RTILE_Y ; l_y++)
+        {
+          sum[l_y]=0;
+        }
+
+        // #pragma unroll
+        // for(int l_y=0; l_y<RTILE_Y ; l_y++)
+        {
+          COMPUTE(sm_rbuffers,-Halo,r_space,local_y);
+          // #pragma unroll
+          _Pragma("unroll")
+          for(int l_y=0; l_y<RTILE_Y ; l_y++)
+          {
+            r_space[l_y+local_y+Halo-Halo]=sum[l_y];
+          }
+        }
+        __syncthreads();
+      }
+    #endif
+    #if SM_FOLER_Y != 0
+      //computation of share memory space
+      {
+        //load shared memory boundary
+        // #pragma unroll
+        // _Pragma("unroll")
+        for(int local_y=tid; local_y<TOTAL_SM_TILE_Y; local_y+=bdim_x)
+        {
+          // #pragma unroll
+          // _Pragma("unroll")
+          for(int l_x=0; l_x<Halo; l_x++)
+          {
+            // east
+            sm_space[(ps_y + local_y)*BASIC_TILE_X+TILE_X + ps_x+l_x]=boundary_buffer[E_STEP+local_y + TOTAL_REG_TILE_Y+ l_x*TILE_Y];
+            //west
+            sm_space[(ps_y + local_y)*BASIC_TILE_X+(-Halo) + ps_x+l_x]=boundary_buffer[W_STEP+local_y+ TOTAL_REG_TILE_Y+ l_x*TILE_Y];
+          }
+        }
+        __syncthreads();
+        // #pragma unroll
+        // _Pragma("unroll")
+        for(int l_y=-Halo; l_y<Halo; l_y++)
+        {
+          r_smbuffer[l_y+Halo] = sm_space[ (ps_y+0+l_y)* BASIC_TILE_X + Halo + local_x];
+        }
+        //computation of shared space 
+        // #pragma unroll
+        // _Pragma("unroll")
+        for ( size_t local_y = 0; local_y < TOTAL_SM_TILE_Y; local_y+=RTILE_Y) 
+        // for (; local_y < sm_upperbound; local_y+=RTILE_Y) 
+        {
+          //load data sm to buffer register
+          #pragma unroll
+          for(int l_y=Halo; l_y<RTILE_Y + Halo; l_y++)
+          {
+            r_smbuffer[l_y+Halo] = sm_space[ (ps_y+local_y+l_y)*BASIC_TILE_X+Halo +local_x];
+          }
+          REAL sum[RTILE_Y];
+          #pragma unroll
+          for(int l_y=0; l_y<RTILE_Y ; l_y++)
+          {
+            sum[l_y]=0;
+          }
+          // #pragma unroll
+          // for(int l_y=0; l_y<RTILE_Y ; l_y++)
+          {
+            //compute
+            COMPUTE2(sm_space,local_y,r_smbuffer,0);
+
+          }
+          __syncthreads();
+          //save result to shared space
+          {
+            // #pragma unroll
+            _Pragma("unroll")
+            for(int l_y=0; l_y<RTILE_Y; l_y++)
+            {
+              sm_space[(ps_y + local_y + l_y) *BASIC_TILE_X+ Halo + local_x]=sum[l_y];//r_smbuffer[l_y];
+            }
+          }
+          __syncthreads();
+          // #pragma unroll
+          _Pragma("unroll")
+          for(int l_y=-Halo; l_y<Halo; l_y++)
+          {
+            r_smbuffer[l_y+Halo] = r_smbuffer[l_y+Halo+RTILE_Y];
+          }
+        }
+      }
+    #endif
+    if(iter==iteration-1)break;
+    //register memory related boundary
+    //south
+    //*******************
+    #if REG_FOLER_Y!=0
+      if(tid>=bdim_x-Halo)
+      {
+        int l_x=tid-bdim_x+Halo;
+        //east
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<TOTAL_REG_TILE_Y; l_y++)
+        {
+          boundary_buffer[E_STEP + l_y + l_x*TILE_Y] = r_space[l_y];//sm_space[(ps_y + local_y) * BASIC_TILE_X + TILE_X + ps_x-Halo+0];
+        }
+      }
+      else if(tid<Halo)
+      {
+        int l_x=tid;
+        //west
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_y=0; l_y<TOTAL_REG_TILE_Y; l_y++)
+        {
+          boundary_buffer[W_STEP + l_y + l_x*TILE_Y] = r_space[l_y];//sm_space[(ps_y + local_y) * BASIC_TILE_X + TILE_X + ps_x-Halo+0];
+        }
+      }
+    #endif
+    // __syncthreads();
+    //store sm related boundary
+    // #pragma unroll
+    #if SM_FOLER_Y != 0
+      _Pragma("unroll")
+      for(int local_y=tid; local_y<TOTAL_SM_TILE_Y; local_y+=bdim_x)
+      {
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_x=0; l_x<Halo; l_x++)
+        {
+          //east
+          boundary_buffer[E_STEP+local_y+TOTAL_REG_TILE_Y + l_x*TILE_Y] = sm_space[(ps_y + local_y) * BASIC_TILE_X + TILE_X + ps_x - Halo + l_x];
+          //west
+          boundary_buffer[W_STEP+local_y+TOTAL_REG_TILE_Y + l_x*TILE_Y] =  sm_space[(ps_y + local_y) * BASIC_TILE_X + ps_x + l_x];
+        }
+      }
+    #endif
+    //deal with sm related boundary
+    //*******************
+    //store boundary to global (NS)
+    // #pragma unroll
+    #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
+      _Pragma("unroll")
+      for(int l_y=0; l_y<Halo; l_y++)
+      {
+        //north
+        #if SM_FOLER_Y!=0
+          __var_4__[(p_y_cache+(TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)-Halo+l_y) * width_x + p_x + tid]=sm_space[(ps_y + TOTAL_SM_TILE_Y - Halo+l_y) * BASIC_TILE_X + tid + ps_x];//boundary_buffer[N_STEP+tid+l_y*TILE_X];//
+        #else
+          __var_4__[(p_y_cache+(TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)-Halo+l_y) * width_x + p_x + tid]=r_space[l_y+TOTAL_REG_TILE_Y-Halo];
+        #endif
+
+         //south
+        #if REG_FOLER_Y!=0
+          __var_4__[(p_y_cache+l_y) * width_x + p_x + tid]= r_space[l_y];//boundary_buffer[S_STEP+tid+l_y*TILE_X] ;//
+        #else
+          __var_4__[(p_y_cache+l_y) * width_x + p_x + tid]= sm_space[(ps_y + l_y) * BASIC_TILE_X + tid + ps_x];//r_space[l_y];
+        #endif
+      }
+    #endif
+    //*******************
+    //store register part boundary
+    __syncthreads();
+    // store the whole boundary space to l2 cache
+    
+    // #pragma unroll
+    #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
+      _Pragma("unroll")
+      for(int lid=tid; lid<TILE_Y; lid+=bdim_x)
+      {
+        //east
+        // #pragma unroll
+        _Pragma("unroll")
+        for(int l_x=0; l_x<Halo; l_x++)
+        {
+           //east
+          
+          l2_cache_o[(((blockIdx.x* 2 +1)* Halo+l_x)*width_y)  + p_y_cache +lid] = boundary_buffer[E_STEP+lid +l_x*TILE_Y];
+          
+          //west
+          l2_cache_o[(((blockIdx.x* 2 + 0) * Halo+l_x)*width_y)  + p_y_cache +lid] = boundary_buffer[W_STEP+lid+l_x*TILE_Y];
+        }
+      }
+    #endif
+    gg.sync();
+
+    REAL* tmp_ptr=__var_4__;
+    __var_4__=input;
+    input=tmp_ptr;
+
+    #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
+      tmp_ptr=l2_cache_o;
+      l2_cache_o=l2_cache_i;
+      l2_cache_i=tmp_ptr;
+    
+       // #pragma unroll
+      _Pragma("unroll")
+      for(int local_y=tid; local_y<TILE_Y; local_y+=bdim_x)
+      {
+        #pragma unroll
+        for(int l_x=0; l_x<Halo; l_x++)
+        {
+          //east
+           boundary_buffer[E_STEP+local_y+l_x*TILE_Y] = ((blockIdx.x == gridDim.x-1)?boundary_buffer[E_STEP+local_y+(Halo-1)*TILE_Y]:
+             l2_cache_i[(((blockIdx.x+1)*2+0)* Halo+l_x)*width_y + p_y_cache + local_y]);
+
+           //west
+           boundary_buffer[W_STEP+local_y+l_x*TILE_Y] = ((blockIdx.x == 0)?boundary_buffer[W_STEP+local_y+0*TILE_Y]:
+            l2_cache_i[(((blockIdx.x-1)*2+1)* Halo+l_x)*width_y + p_y_cache + local_y]);
+        }
+      }
+    #endif
+
+    #if REG_FOLER_Y !=0
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int l_y=TOTAL_REG_TILE_Y-1; l_y>=0; l_y--)
+      {
+        r_space[l_y+Halo]=r_space[l_y];
+      }
+    #endif
+
+  }
+  #if REG_FOLER_Y!=0
+    // r_space->glb
+    // #pragma unroll
+    _Pragma("unroll")
+    for (size_t l_y = 0; l_y < TOTAL_REG_TILE_Y; l_y++)
+    {
+      int local_y=l_y;
+      for(int local_x=tid; local_x<TILE_X&&local_x+p_x<width_x; local_x+=bdim_x)
+      {
+        __var_4__[(p_y_cache+local_y) * width_x + p_x + tid] = r_space[l_y];//sm_rbuffer[(ps_y + l_y) * BASIC_TILE_X + local_x + ps_x];
+      }
+    }
+  #endif
+  
+  #if SM_FOLER_Y!=0
+    __syncthreads();
+    // #pragma unroll
+    _Pragma("unroll")
+    for (size_t l_y = 0; l_y < TOTAL_SM_TILE_Y&&l_y+TOTAL_REG_TILE_Y+p_y_cache<width_y; l_y++)
+    {
+      int local_y=l_y+TOTAL_REG_TILE_Y;
+      for(int local_x=tid; local_x<TILE_X&&local_x+p_x<width_x; local_x+=bdim_x)
+      {
+        __var_4__[(p_y_cache+local_y) * width_x + p_x + local_x] = sm_space[(ps_y + l_y) * BASIC_TILE_X + local_x + ps_x];
+      }
+    }
+  #endif
+}
+#endif
 
 #if defined(BASELINE_CM)||defined(BASELINE)||defined(PERSISTENT)
 
@@ -396,7 +966,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
   // int ps_x = Halo + tid;
   const int ps_y = Halo;
   const int ps_x = Halo;
-   // REAL* sb2 = sb+TILE_SM_X*TILE_SM_Y;
+   // REAL* sb2 = sb+TILE_BASIC_TILE_X*TILE_SM_Y;
   const int p_x = blockIdx.x * TILE_X ;
 
   int blocksize_y=(width_y/gridDim.y);
@@ -418,7 +988,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
                                             p_y, width_y,
                                             p_x, width_x,
                                             tid, tid,
-                                            ps_y, ps_x,TILE_SM_X);
+                                            ps_y, ps_x,TILE_BASIC_TILE_X);
 
     //computation of register space 
     for(int global_y=p_y; global_y<p_y_end; global_y+=RTILE_Y)
@@ -428,14 +998,14 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
                                             global_y, width_y,
                                             p_x, width_x,
                                             tid, tid,
-                                            ps_y, ps_x,TILE_SM_X);
+                                            ps_y, ps_x,TILE_BASIC_TILE_X);
 
       __syncthreads();
       //shared memory buffer -> register buffer
       sm2reg<REAL,0,Halo*2+RTILE_Y, Halo*2+RTILE_Y>(r_smbuffer, sm_rbuffer,
                                                     0,
                                                     ps_x, tid,
-                                                    TILE_SM_X);
+                                                    TILE_BASIC_TILE_X);
 
       REAL sum[RTILE_Y];
       init_reg_array<REAL,RTILE_Y>(sum,0);
@@ -443,7 +1013,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
       //COMPUTE2(sm_rbuffer,0,r_smbuffer,0);
       
       computation<REAL,RTILE_Y,Halo>(sum,
-                                      sm_rbuffer, ps_y, local_x+ps_x, TILE_SM_X,
+                                      sm_rbuffer, ps_y, local_x+ps_x, TILE_BASIC_TILE_X,
                                       r_smbuffer, 0,
                                       west, east,
                                       north,south,  center);
@@ -455,7 +1025,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
       __syncthreads();
       
       //some data in shared memroy can be used in next tiling. 
-      smself<REAL,-Halo, Halo>(sm_rbuffer, ps_y, RTILE_Y, tid, TILE_SM_X);
+      smself<REAL,-Halo, Halo>(sm_rbuffer, ps_y, RTILE_Y, tid, TILE_BASIC_TILE_X);
 
     }
 
@@ -526,15 +1096,15 @@ __global__ void kernel2d_restrict(REAL* input,
 }
 #endif
 
-  __global__ void printptx()
-  {
-    printf("code is run in %d\n",PERKS_ARCH);
-  }
-  void host_printptx()
-  {
-    printptx<<<1,1>>>();
-    cudaDeviceSynchronize();
-  }
+__global__ void printptx()
+{
+  printf("code is run in %d\n",PERKS_ARCH);
+}
+void host_printptx()
+{
+  printptx<<<1,1>>>();
+  cudaDeviceSynchronize();
+}
 
 template<class REAL>
 void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
@@ -554,7 +1124,9 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #ifdef NAIVE
   auto execute_kernel = kernel2d_restrict<REAL>;
 #endif 
-
+#ifdef GEN
+  auto execute_kernel = kernel_general<REAL>;
+#endif
   int sm_count;
   cudaDeviceGetAttribute ( &sm_count, cudaDevAttrMultiProcessorCount,0 );
   
@@ -605,34 +1177,39 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 size_t executeSM=0;
 #ifndef NAIVE
   //shared memory used for compuation
-  size_t sharememory_basic=(1+(TILE_X+2*Halo)*(RTILE_Y+2*Halo))*sizeof(REAL);
+  size_t sharememory_basic=(1+BASIC_SM_SPACE)*sizeof(REAL);
   executeSM=sharememory_basic;
 #endif
   #if defined(GEN) || defined(MIX)
-  size_t sharememory3=sharememory2+(Halo*2*(TILE_Y))*sizeof(REAL);
-  size_t sharememory4=sharememory3-(STILE_SIZE*sizeof(REAL));
+  size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
+  size_t y_axle_halo = (Halo*2*TILE_Y)*sizeof(REAL);
+
+  executeSM=sharememory_basic+y_axle_halo;
+  if(SM_FOLER_Y!=0)executeSM+=sm_cache_size;
+  //size_t sharememory3=sharememory_basic+(Halo*2*(TILE_Y))*sizeof(REAL);
+  //size_t sharememory4=sharememory3-(STILE_SIZE*sizeof(REAL));
 #endif
 
 
 #ifdef PERSISTENTTHREAD
   int numBlocksPerSm_current=0;
   #ifdef GEN
-    if(SFOLDER_Y!=0)
-    {
-      // cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory3,0);
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_general, bdim_x, sharememory3);
-    }
-    else
-    {
-      // cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory4,0);
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_general, bdim_x, sharememory4);
-    }
+    // if(SM_FOLER_Y!=0)
+    // {
+    //   // cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory3,0);
+    //   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+    //     &numBlocksPerSm_current, kernel_general, bdim_x, sharememory3);
+    // }
+    // else
+    // {
+    //   // cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory4,0);
+    //   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+    //     &numBlocksPerSm_current, kernel_general, bdim_x, sharememory4);
+    // }
   
   #endif
   #ifdef MIX
-    if(SFOLDER_Y!=0)
+    if(SM_FOLER_Y!=0)
     {
       // cudaLaunchCooperativeKernel((void*)kernel_mix, grid_dim, block_dim, KernelArgs2,sharememory3,0);
       cudaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -646,7 +1223,7 @@ size_t executeSM=0;
     }
   
   #endif
-  #if defined(BASELINE_CM)||defined(PERSISTENT)
+  #if defined(BASELINE_CM)||defined(PERSISTENT)||defined(GEN)
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdim_x, executeSM);
   #endif
@@ -722,17 +1299,17 @@ size_t executeSM=0;
       cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
   #endif
 
-  #ifdef GEN
-      printf("<%d,%d>\t<%d,%d>\t%d\t%d\t%d\t",bdim_x,1,grid_dim.x,grid_dim.y,grid_dim.x*grid_dim.y/sm_count,RFOLDER_Y,SFOLDER_Y);
-      if(SFOLDER_Y!=0)
-      {
-        cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory3,0);
-      }
-      else
-      {
-        cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory4,0);
-      }
-  #endif
+  // #ifdef GEN
+  //     printf("<%d,%d>\t<%d,%d>\t%d\t%d\t%d\t",bdim_x,1,grid_dim.x,grid_dim.y,grid_dim.x*grid_dim.y/sm_count,REG_FOLER_Y,SM_FOLER_Y);
+  //     if(SM_FOLER_Y!=0)
+  //     {
+  //       cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory3,0);
+  //     }
+  //     else
+  //     {
+  //       cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs_NULL,sharememory4,0);
+  //     }
+  // #endif
 #endif 
 
 #ifdef _TIMER_
@@ -744,7 +1321,7 @@ size_t executeSM=0;
 
 
 #ifdef MIX
-  if(SFOLDER_Y!=0)
+  if(SM_FOLER_Y!=0)
   {
     cudaLaunchCooperativeKernel((void*)kernel_mix, grid_dim, block_dim, KernelArgs2,sharememory3,0);
   }
@@ -754,16 +1331,16 @@ size_t executeSM=0;
   }
 #endif
 
-#ifdef GEN 
-  if(SFOLDER_Y!=0)
-  {
-    cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs4,sharememory3,0);
-  }
-  else
-  {
-    cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs4,sharememory4,0);
-  }
-#endif
+// #ifdef GEN 
+//   if(SM_FOLER_Y!=0)
+//   {
+//     cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs4,sharememory3,0);
+//   }
+//   else
+//   {
+//     cudaLaunchCooperativeKernel((void*)kernel_general, grid_dim, block_dim, KernelArgs4,sharememory4,0);
+//   }
+// #endif
 
 //#ifdef PERSISTENT
 //  cudaLaunchCooperativeKernel((void*)kernel_persistent_baseline, grid_dim, block_dim, KernelArgs4, sharememory_basic,0);
@@ -798,14 +1375,8 @@ size_t executeSM=0;
 #ifndef __PRINT__  
   printf("sm_count is %d\n",sm_count);
   printf("MAX shared memory is %f KB but only use %f KB\n",maxSharedMemory/1024.0,SharedMemoryUsed/1024.0);
-  size_t sharememory= (TILE_SM_X*TILE_SM_Y+1)*sizeof(REAL);
-  printf(" shared meomory size is %ld KB\n", sharememory/1024);
-  #if defined(BASELINE)||defined(BASELINE_CM)||defined(PERSISTENT)
-    printf(" shared meomory size 0 (for computation and baseline) is %ld KB\n", sharememory_basic/1024);
-  #endif
-  #if defined(GEN) || defined(MIX)
-    printf(" shared meomory size 3 (for general & mix)is %ld KB\n", sharememory3/1024);
-  #endif
+  printf(" shared meomory size is %ld KB\n", executeSM/1024);
+
 #endif
 
 #ifdef __PRINT__
@@ -841,16 +1412,16 @@ size_t executeSM=0;
   //   #else
   //     printf("asyncgen"); 
   //   #endif
-  //   #if RFOLDER_Y==0 && SFOLDER_Y ==0
+  //   #if REG_FOLER_Y==0 && SM_FOLER_Y ==0
   //     printf("\t");
   //   #endif
-  //   #if RFOLDER_Y==0 && SFOLDER_Y !=0
+  //   #if REG_FOLER_Y==0 && SM_FOLER_Y !=0
   //     printf("_sm\t");
   //   #endif
-  //   #if RFOLDER_Y!=0 && SFOLDER_Y ==0
+  //   #if REG_FOLER_Y!=0 && SM_FOLER_Y ==0
   //     printf("_reg\t");
   //   #endif
-  //   #if RFOLDER_Y!=0 && SFOLDER_Y !=0
+  //   #if REG_FOLER_Y!=0 && SM_FOLER_Y !=0
   //     printf("_mix\t");
   //   #endif
   // #endif
@@ -879,7 +1450,7 @@ size_t executeSM=0;
 #if defined(GEN) || defined(PERSISTENT) || defined(MIX)
   printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)TILE_Y*grid_dim.y);
 #endif
-  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)SFOLDER_Y, (int)RFOLDER_Y);
+  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)SM_FOLER_Y, (int)REG_FOLER_Y);
   #endif
 
   cudaEventDestroy(_forma_timer_start_);
