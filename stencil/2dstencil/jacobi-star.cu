@@ -742,14 +742,19 @@ const int tile_basic_tile_x = blockDim.x + 2*Halo;
                                       north,south,  center);
           __syncthreads();
           //save result to shared space
-          {
-            // #pragma unroll
-            _Pragma("unroll")
-            for(int l_y=0; l_y<RTILE_Y; l_y++)
-            {
-              sm_space[(ps_y + local_y + l_y) *BASIC_TILE_X+ Halo + local_x]=sum[l_y];//r_smbuffer[l_y];
-            }
-          }
+          // {
+          //   // #pragma unroll
+          //   _Pragma("unroll")
+          //   for(int l_y=0; l_y<RTILE_Y; l_y++)
+          //   {
+          //     sm_space[(ps_y + local_y + l_y) *BASIC_TILE_X+ Halo + local_x]=sum[l_y];//r_smbuffer[l_y];
+          //   }
+          // }
+          reg2sm<REAL, RTILE_Y, RTILE_Y>(sum, sm_space,
+                                      ps_y+local_y,
+                                      ps_x, tid,
+                                      tile_basic_tile_x,
+                                      0);
           __syncthreads();
           // #pragma unroll
           _Pragma("unroll")
