@@ -41,10 +41,11 @@ int main(int argc, char const *argv[])
   int width_y;
   int iteration;
   width_x=width_y=4096;
+  width_y=64;
 #ifdef REFCHECK
   iteration=4;
 #else
-  iteration=3;
+  iteration=1000;
 #endif
   #define REAL float
   
