@@ -132,97 +132,6 @@ void Check_CUDA_Error(const char* message);
   const REAL south[6]={5.0/118,7.0/118,5.0/118,1.0/118,6.0/118,2.0/118};\
   const REAL center=15.0/118;
 
-
-#define COMPUTE(sm_ptrs,sm_idx,r_ptr,r_idx) \
-do{\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=sm_ptrs[(l_y+ps_y+sm_idx)][local_x+ps_x-1-hl]*west[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=r_ptr[r_idx+l_y+Halo-1-hl]*south[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-  {\
-    sum[l_y]+=r_ptr[r_idx+l_y+Halo]*center;\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=r_ptr[r_idx+l_y+Halo+1+hl]*north[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=sm_ptrs[(l_y+ps_y+sm_idx)][local_x+ps_x+1+hl]*east[hl];\
-    }\
-  }\
-}while(0)
-
-#define COMPUTE2(sm_ptr,sm_idx,r_ptr,r_idx) \
-do{\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*BASIC_TILE_X+local_x+ps_x-1-hl]*west[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=r_ptr[r_idx+l_y+Halo-1-hl]*south[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-  {\
-    sum[l_y]+=r_ptr[r_idx+l_y+Halo]*center;\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=r_ptr[r_idx+l_y+Halo+1+hl]*north[hl];\
-    }\
-  }\
-  _Pragma("unroll")\
-  for(int hl=0; hl<Halo; hl++)\
-  {\
-    _Pragma("unroll")\
-    for(int l_y=0; l_y<RTILE_Y ; l_y++)\
-    {\
-      sum[l_y]+=sm_ptr[(l_y+ps_y+sm_idx)*BASIC_TILE_X+local_x+ps_x+1+hl]*east[hl];\
-    }\
-  }\
-}while(0)
-
 template<class REAL, int RESULT_SIZE, int halo, int INPUTREG_SIZE=(RESULT_SIZE+2*halo)>
 __device__ void __forceinline__ computation(REAL result[RESULT_SIZE], 
                                             REAL* sm_ptr, int sm_y_base, int sm_x_ind,int sm_width, 
@@ -352,18 +261,18 @@ __device__ void __forceinline__ reg2reg(REAL src_reg[SRC_SIZE], REAL dst_reg[DST
   }
 }
 
-//load global memory src to shared memory
-template<class REAL, int START, int END, int halo, bool isInit=false, bool sync=true>
+
+template<class REAL, int halo, bool isInit=false, bool sync=true>
 __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer, 
+                                              int size, 
                                               int global_y_base, int global_y_size,
                                               int global_x_base, int global_x_size,
                                               int sm_y_base, int sm_x_base, int sm_width,
                                               int tid)
 {
-  if(START==END)return;
   //fill shared memory buffer
   _Pragma("unroll")
-  for(int l_y=START; l_y<END; l_y++)
+  for(int l_y=0; l_y<size; l_y++)
   {
     int l_global_y;
     if(isInit)
@@ -402,16 +311,17 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
       }
     #endif
   }
-  #ifdef ASYNCSM
-    if(sync=true)
-    {
+  if(sync==true)
+  {  
+    #ifdef ASYNCSM
+
       __pipeline_commit();
       __pipeline_wait_prior(0);
-    }
-  #else
-    __syncthreads();
-  #endif
-
+    #else
+      __syncthreads();
+    #endif
+  }
+  
   #undef dst_ind
 }
 
@@ -427,16 +337,18 @@ __device__ void __forceinline__ pipesync()
   #endif
 }
 
-template<class REAL, int SIZE, bool considerbound=true>
+//template<class REAL, int SIZE, bool considerbound=true>
+template<class REAL, bool considerbound=true>
 __device__ void __forceinline__ sm2global(REAL *sm_src, REAL* dst,
+                                          int size, 
                                           int global_y_base, int global_y_size,
                                           int global_x_base, int global_x_size,
                                           int sm_y_base, int sm_x_base, int sm_width,
                                           int tid)
 {
 
-  _Pragma("unroll")
-  for(int l_y=0; l_y<SIZE; l_y++)
+ // _Pragma("unroll")
+  for(int l_y=0; l_y<size; l_y++)
   {
     int global_y=l_y+global_y_base;
     int global_x=tid+global_x_base;
@@ -488,6 +400,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   cg::grid_group gg = cg::this_grid();
   //extern __shared__ REAL sm[];
   extern __shared__ char sm[];
+  
   #if SM_FOLER_Y!=0
     //shared memory buffer space
     REAL* sm_space = (REAL*)sm+1;
@@ -497,6 +410,9 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   #else
     REAL* sm_rbuffer = (REAL*)sm + 1;
   #endif
+
+  //REAL* sm_rbuffer =(REAL*)sm+1;
+  //REAL* sm_space = sm_rbuffer+BASIC_SM_SPACE;
 
   register REAL* sm_rbuffers[2*Halo+RTILE_Y];
   sm_rbuffers[0]=sm_rbuffer;
@@ -540,7 +456,8 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   #endif
   // load data global to sm
   #if SM_FOLER_Y != 0
-    global2sm<REAL,0,TOTAL_SM_TILE_Y,0>(input,sm_space,
+    global2sm<REAL,0>(input,sm_space,
+                                        TOTAL_SM_TILE_Y,
                                         p_y_cache+TOTAL_REG_TILE_Y, width_y,
                                         p_x, width_x,
                                         ps_y, ps_x, BASIC_TILE_X,
@@ -619,27 +536,21 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
     }
 
     //computation of general space 
-    global2sm<REAL,-Halo,Halo,Halo,true,NOSYNC>(input, sm_rbuffer, 
-                                            p_y, width_y,
+    global2sm<REAL,Halo,true,NOSYNC>(input, sm_rbuffer, 
+                                            Halo*2,
+                                            p_y-Halo, width_y,
                                             p_x, width_x,
-                                            ps_y, ps_x, tile_basic_tile_x,
+                                            ps_y-Halo, ps_x, tile_basic_tile_x,
                                             tid);
 
     for(int global_y=p_y; global_y<p_y_cache; global_y+=RTILE_Y)
     {
-      //data initialization
-      // if(global_y==p_y)
-      // {
-      //   global2sm<REAL,-Halo,Halo,Halo,true,NOSYNC>(input, sm_rbuffer, 
-      //                                       p_y, width_y,
-      //                                       p_x, width_x,
-      //                                       ps_y, ps_x, tile_basic_tile_x,
-      //                                       tid);
-      // }
-      global2sm<REAL,Halo,RTILE_Y+Halo,Halo>(input, sm_rbuffer, 
-                                          global_y, width_y,
+
+      global2sm<REAL,Halo>(input, sm_rbuffer,
+                                          RTILE_Y, 
+                                          global_y+Halo, width_y,
                                           p_x, width_x,
-                                          ps_y, ps_x, tile_basic_tile_x,
+                                          ps_y+Halo, ps_x, tile_basic_tile_x,
                                           tid);
       sm2reg<REAL,Halo*2+RTILE_Y, Halo*2+RTILE_Y>(sm_rbuffer, r_smbuffer, 
                                                     0,
@@ -719,10 +630,6 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
                                             0);
         for ( size_t local_y = 0; local_y < TOTAL_SM_TILE_Y; local_y+=RTILE_Y) 
         {
-          // if(local_y==0)
-          // {
-            
-          // }
           sm2reg<REAL,RTILE_Y+2*Halo,RTILE_Y>(sm_space, r_smbuffer, 
                                             ps_y+local_y+Halo, 
                                             ps_x, tid,
@@ -888,7 +795,8 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   #if SM_FOLER_Y!=0
     __syncthreads();
     // shared memory -> global
-    sm2global<REAL,TOTAL_SM_TILE_Y,false>(sm_space, __var_4__,
+    sm2global<REAL,false>(sm_space, __var_4__, 
+                                    TOTAL_SM_TILE_Y,
                                     p_y_cache+TOTAL_REG_TILE_Y, width_y,
                                     p_x, width_x,
                                     ps_y, ps_x, BASIC_TILE_X,
@@ -942,10 +850,11 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
   {
     int local_x=tid;
 
-    global2sm<REAL,-Halo,Halo,Halo,true,NOSYNC>(input, sm_rbuffer, 
-                                            p_y, width_y,
+    global2sm<REAL,Halo,true,NOSYNC>(input, sm_rbuffer, 
+                                            2*Halo,
+                                            p_y-Halo, width_y,
                                             p_x, width_x,
-                                            ps_y, ps_x, tile_basic_tile_x,
+                                            ps_y-Halo, ps_x, tile_basic_tile_x,
                                             tid);
                                             
 
@@ -953,10 +862,11 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
     for(int global_y=p_y; global_y<p_y_end; global_y+=LOCAL_TILE_Y)
     {
 
-      global2sm<REAL,Halo,LOCAL_TILE_Y+Halo,Halo>(input, sm_rbuffer, 
-                                            global_y, width_y,
+      global2sm<REAL,Halo>(input, sm_rbuffer,
+                                            LOCAL_TILE_Y, 
+                                            global_y+Halo, width_y,
                                             p_x, width_x,
-                                            ps_y, ps_x, tile_basic_tile_x,
+                                            ps_y+Halo, ps_x, tile_basic_tile_x,
                                             tid);
 
       //__syncthreads();
