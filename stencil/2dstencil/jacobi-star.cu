@@ -70,9 +70,9 @@ void Check_CUDA_Error(const char* message);
 /*********************ARGUMENTS for PERKS*******************************/
 // Here "Folder" means how many times of "tiling unit" is stored in given memory structure
 // Shared Memory folder of basic tiling
-#ifndef SM_FOLER_Y
-#define SM_FOLER_Y (2)
-#endif
+// #ifndef SM_FOLER_Y
+// #define SM_FOLER_Y (2)
+// #endif
 // Register Files folder of basic tiling
 #ifndef REG_FOLER_Y
 #define REG_FOLER_Y (6)
@@ -363,7 +363,8 @@ template<class REAL, int LOCAL_TILE_Y=RTILE_Y, int halo=Halo, int reg_folder_y=R
 __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__, 
   REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
-  int iteration)
+  int iteration,
+  int max_sm_flder)
 {
   #define UseRegCache (reg_folder_y!=0)
   stencilParaT;
@@ -372,7 +373,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   //extern __shared__ REAL sm[];
   extern __shared__ char sm[];
  
-  const int total_sm_tile_y = LOCAL_TILE_Y*SM_FOLER_Y;//consider how to automatically compute it later
+  const int total_sm_tile_y = LOCAL_TILE_Y*max_sm_flder;//SM_FOLER_Y;//consider how to automatically compute it later
   const int total_reg_tile_y = LOCAL_TILE_Y*reg_folder_y;
   const int total_tile_y = total_sm_tile_y+total_reg_tile_y;
   const int total_reg_tile_y_with_halo = total_reg_tile_y+2*halo;
@@ -1027,6 +1028,7 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #endif
 
 size_t executeSM = 0;
+size_t max_sm_flder=0;
 #ifndef NAIVE
   //shared memory used for compuation
   int basic_sm_space=(RTILE_Y+2*Halo)*(TILE_X+2*Halo);
@@ -1034,11 +1036,20 @@ size_t executeSM = 0;
   executeSM = sharememory_basic;
 #endif
   #if defined(GEN) || defined(MIX)
-  size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
-  size_t y_axle_halo = (Halo*2*TILE_Y)*sizeof(REAL);
+  max_sm_flder=(SharedMemoryUsed/sizeof(REAL)
+                          -basic_sm_space
+                          -2*Halo*REG_FOLER_Y*RTILE_Y
+                          -2*Halo*(TILE_X+2*Halo))/(TILE_X+4*Halo)/RTILE_Y;
 
+  // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
+  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*Halo)*(TILE_X+2*Halo)*sizeof(REAL);
+  size_t y_axle_halo = (Halo*2*(max_sm_flder+REG_FOLER_Y)*RTILE_Y)*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
-  if(SM_FOLER_Y!=0)executeSM+=sm_cache_size;
+  executeSM+=sm_cache_size;
+#ifndef __PRINT__
+  printf("the max flder is %d and the total sm size is %d\n", max_sm_flder, executeSM);
+#endif
+
   //size_t sharememory3=sharememory_basic+(Halo*2*(TILE_Y))*sizeof(REAL);
   //size_t sharememory4=sharememory3-(STILE_SIZE*sizeof(REAL));
 #endif
@@ -1101,12 +1112,12 @@ size_t executeSM = 0;
   int l_iteration=iteration;
   void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
     (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
-    (void*)&l_iteration};
+    (void*)&l_iteration, (void*)&max_sm_flder};
 
   #ifdef WARMUPRUN
     void* KernelArgs_NULL[] ={(void**)&__var_2__,(void**)&width_y,
       (void*)&width_x,(void*)&__var_1__,(void*)&L2_cache3,(void*)&L2_cache4,
-      (void*)&l_iteration};
+      (void*)&l_iteration, (void *)&max_sm_flder};
   #endif
 
 #endif
@@ -1261,9 +1272,9 @@ size_t executeSM = 0;
   printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000);
   printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
 #if defined(GEN) || defined(PERSISTENT) || defined(MIX)
-  printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)TILE_Y*grid_dim.y);
+  printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLER_Y)*RTILE_Y*grid_dim.y);
 #endif
-  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)SM_FOLER_Y, (int)REG_FOLER_Y);
+  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLER_Y);
   #endif
 
   cudaEventDestroy(_forma_timer_start_);
