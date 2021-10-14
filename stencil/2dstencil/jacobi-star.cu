@@ -74,8 +74,8 @@ void Check_CUDA_Error(const char* message);
 // #define SM_FOLER_Y (2)
 // #endif
 // Register Files folder of basic tiling
-#ifndef REG_FOLER_Y
-#define REG_FOLER_Y (6)
+#ifndef REG_FOLDER_Y
+#define REG_FOLDER_Y (6)
 #endif
 // Total 
 #define ISINITI (true)
@@ -84,7 +84,7 @@ void Check_CUDA_Error(const char* message);
 #define NOSYNC (false)
 
 //#undef TILE_Y
-#define USESM
+// #define USESM
 
 #ifdef USESM
   #define USESMSET (true)
@@ -448,7 +448,7 @@ __device__ void __forceinline__ reg2sm( REAL reg_src[REG_SIZE], REAL* sm_dst,
 }
 
 #ifdef GEN
-template<class REAL, int LOCAL_TILE_Y=RTILE_Y, int halo=Halo, int reg_folder_y=REG_FOLER_Y, bool UseSMCache=true>
+template<class REAL, int LOCAL_TILE_Y=RTILE_Y, int halo=Halo, int reg_folder_y=REG_FOLDER_Y, bool UseSMCache=USESMSET>
 __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__, 
   REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
@@ -497,7 +497,11 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   //register buffer space
   //seems use much space than necessary when no use register version. 
   register REAL r_space[total_reg_tile_y_with_halo];
-  register REAL r_smbuffer[sizeof_rbuffer];
+#ifndef BOX
+  register REAL r_smbuffer[2*halo+LOCAL_TILE_Y];
+#else
+  register REAL r_smbuffer[2*halo+1][2*halo+LOCAL_TILE_Y];
+#endif
 
   const int tid = threadIdx.x;
   // int ps_x = Halo + tid;
@@ -1100,7 +1104,7 @@ void host_printptx()
 
 
 #define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
-#define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLER_Y)
+#define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLDER_Y)
 #define TOTAL_SM_CACHE_SPACE (TILE_X+2*Halo)*(TOTAL_SM_TILE_Y+2*Halo)
 
 #define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
@@ -1177,12 +1181,12 @@ size_t max_sm_flder=0;
   #if defined(GEN) || defined(MIX)
   max_sm_flder=(SharedMemoryUsed/sizeof(REAL)
                           -basic_sm_space
-                          -2*Halo*REG_FOLER_Y*RTILE_Y
+                          -2*Halo*REG_FOLDER_Y*RTILE_Y
                           -2*Halo*(TILE_X+2*Halo))/(TILE_X+4*Halo)/RTILE_Y;
 
   // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
   size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*Halo)*(TILE_X+2*Halo)*sizeof(REAL);
-  size_t y_axle_halo = (Halo*2*(max_sm_flder+REG_FOLER_Y)*RTILE_Y)*sizeof(REAL);
+  size_t y_axle_halo = (Halo*2*(max_sm_flder+REG_FOLDER_Y)*RTILE_Y)*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
 #ifndef __PRINT__
@@ -1375,16 +1379,16 @@ size_t max_sm_flder=0;
   //   #else
   //     printf("asyncgen"); 
   //   #endif
-  //   #if REG_FOLER_Y==0 && SM_FOLER_Y ==0
+  //   #if REG_FOLDER_Y==0 && SM_FOLER_Y ==0
   //     printf("\t");
   //   #endif
-  //   #if REG_FOLER_Y==0 && SM_FOLER_Y !=0
+  //   #if REG_FOLDER_Y==0 && SM_FOLER_Y !=0
   //     printf("_sm\t");
   //   #endif
-  //   #if REG_FOLER_Y!=0 && SM_FOLER_Y ==0
+  //   #if REG_FOLDER_Y!=0 && SM_FOLER_Y ==0
   //     printf("_reg\t");
   //   #endif
-  //   #if REG_FOLER_Y!=0 && SM_FOLER_Y !=0
+  //   #if REG_FOLDER_Y!=0 && SM_FOLER_Y !=0
   //     printf("_mix\t");
   //   #endif
   // #endif
@@ -1411,9 +1415,9 @@ size_t max_sm_flder=0;
   printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000);
   printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
 #if defined(GEN) || defined(PERSISTENT) || defined(MIX)
-  printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLER_Y)*RTILE_Y*grid_dim.y);
+  printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
 #endif
-  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLER_Y);
+  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
   #endif
 
   cudaEventDestroy(_forma_timer_start_);
