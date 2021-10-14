@@ -84,6 +84,14 @@ void Check_CUDA_Error(const char* message);
 #define NOSYNC (false)
 
 //#undef TILE_Y
+#define USESM
+
+#ifdef USESM
+  #define USESMSET (true)
+#else
+  #define USESMSET (false)
+#endif
+
 
 #define cudaCheckError() {                                          \
  cudaError_t e=cudaGetLastError();                                 \
@@ -92,22 +100,55 @@ void Check_CUDA_Error(const char* message);
  }                                                                 \
 }
 
+#ifndef BOX
 #define stencilParaT \
   const REAL west[6]={12.0/118,9.0/118,3.0/118,2.0/118,5.0/118,6.0/118};\
   const REAL east[6]={12.0/118,9.0/118,3.0/118,3.0/118,4.0/118,6.0/118};\
   const REAL north[6]={5.0/118,7.0/118,5.0/118,4.0/118,3.0/118,2.0/118};\
   const REAL south[6]={5.0/118,7.0/118,5.0/118,1.0/118,6.0/118,2.0/118};\
   const REAL center=15.0/118;
+;
+  #define stencilParaList const REAL west[6],const REAL east[6],const REAL north[6],const REAL south[6],const REAL center
+  #define stencilParaInput  west,east,north,south,center
+  #define R_PTR r_ptr[INPUTREG_SIZE]
+#else
+  #if Halo==1
+  #define stencilParaT \
+  const REAL filter[3][3] = {\
+    {7.0/118, 5.0/118, 9.0/118},\
+    {12.0/118,15.0/118,12.0/118},\
+    {9.0/118, 5.0/118, 7.0/118}\
+  };
+  #endif
+  #if Halo==2
+  #define stencilParaT \
+  const REAL filter[5][5] = {\
+    {1.0/118, 2.0/118, 3.0/118, 4.0/118, 5.0/118},\
+    {7.0/118, 7.0/118, 5.0/118, 7.0/118, 6.0/118},\
+    {8.0/118,12.0/118,15.0/118,12.0/118,12.0/118},\
+    {9.0/118, 9.0/118, 5.0/118, 7.0/118, 15.0/118},\
+    {10.0/118, 11.0/118, 12.0/118, 13.0/118, 14.0/118}\
+  };
+  #endif
+
+  #define stencilParaList const REAL filter[halo*2+1][halo*2+1]
+  #define stencilParaInput  filter
+  #define R_PTR r_ptr[2*halo+1][INPUTREG_SIZE]
+#endif
+
 
 template<class REAL, int RESULT_SIZE, int halo, int INPUTREG_SIZE=(RESULT_SIZE+2*halo)>
 __device__ void __forceinline__ computation(REAL result[RESULT_SIZE], 
                                             REAL* sm_ptr, int sm_y_base, int sm_x_ind,int sm_width, 
-                                            REAL r_ptr[INPUTREG_SIZE], int reg_base, 
-                                            const REAL west[6],const REAL east[6], 
-                                            const REAL north[6],const REAL south[6],
-                                            const REAL center 
+                                            REAL R_PTR,
+                                            int reg_base, 
+                                            stencilParaList
+                                            // const REAL west[6],const REAL east[6], 
+                                            // const REAL north[6],const REAL south[6],
+                                            // const REAL center 
                                           )
 {
+#ifndef BOX
   _Pragma("unroll")
   for(int hl=0; hl<halo; hl++)
   {
@@ -149,6 +190,21 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
       result[l_y]+=sm_ptr[(l_y+sm_y_base)*sm_width+sm_x_ind+1+hl]*east[hl];
     }
   }
+#else
+  _Pragma("unroll")\
+  for(int hl_y=-halo; hl_y<=halo; hl_y++)
+  {
+    _Pragma("unroll")
+    for(int hl_x=-halo; hl_x<=halo; hl_x++)
+    {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<RESULT_SIZE ; l_y++)
+      {
+        result[l_y]+=filter[hl_y+halo][hl_x+halo]*r_ptr[hl_x+halo][hl_y+halo+l_y];
+      }
+    }
+  }
+#endif
 }
 
 
@@ -220,7 +276,7 @@ __device__ void __forceinline__ ptrselfcp(REAL *ptr,
   }
 }
 
-template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE>
+template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE,int halo=0>
 __device__ void __forceinline__ reg2reg(REAL src_reg[SRC_SIZE], REAL dst_reg[DST_SIZE],
                                         int src_basic, int dst_basic)
 {
@@ -231,6 +287,20 @@ __device__ void __forceinline__ reg2reg(REAL src_reg[SRC_SIZE], REAL dst_reg[DST
   }
 }
 
+template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE, int halo>
+__device__ void __forceinline__ regs2regs(REAL src_reg[2*halo+1][SRC_SIZE], REAL dst_reg[2*halo+1][DST_SIZE],
+                                        int src_basic, int dst_basic)
+{
+  _Pragma("unroll")
+  for(int l_x=0; l_x<halo*2+1; l_x++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<SIZE; l_y++)
+    {
+      dst_reg[l_x][l_y+dst_basic]=src_reg[l_x][l_y+src_basic];
+    }
+  }
+}
 
 template<class REAL, int halo, bool isInit=false, bool sync=true>
 __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer, 
@@ -330,7 +400,7 @@ __device__ void __forceinline__ sm2global(REAL *sm_src, REAL* dst,
   }
 }
 
-template<class REAL, int REG_SIZE, int SIZE>
+template<class REAL, int REG_SIZE, int SIZE, int halo=0>
 __device__ void __forceinline__ sm2reg(REAL* sm_src, REAL reg_dst[SIZE],
                                       int y_base, 
                                       int x_base, int x_id,
@@ -343,6 +413,25 @@ __device__ void __forceinline__ sm2reg(REAL* sm_src, REAL reg_dst[SIZE],
     reg_dst[l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id];//input[(global_y) * width_x + global_x];
   }
 }
+
+template<class REAL, int REG_SIZE, int SIZE, int halo>
+__device__ void __forceinline__ sm2regs(REAL* sm_src, REAL reg_dst[2*halo+1][REG_SIZE],
+                                      int y_base, 
+                                      int x_base, int x_id,
+                                      int sm_width, 
+                                      int reg_base=0)
+{
+  _Pragma("unroll")
+  for(int l_x=0; l_x<halo*2+1; l_x++)
+  {
+    _Pragma("unroll")
+    for(int l_y=0; l_y<SIZE ; l_y++)
+    {
+      reg_dst[l_x][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+l_x-halo];//input[(global_y) * width_x + global_x];
+    }
+  }
+}
+
 
 template<class REAL, int REG_SIZE, int SIZE>
 __device__ void __forceinline__ reg2sm( REAL reg_src[REG_SIZE], REAL* sm_dst,
@@ -366,7 +455,15 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   int iteration,
   int max_sm_flder)
 {
+  if(!UseSMCache) max_sm_flder=0;
   #define UseRegCache (reg_folder_y!=0)
+  #ifdef BOX
+    #define SM2REG sm2regs
+    #define REG2REG regs2regs
+  #else
+    #define SM2REG sm2reg
+    #define REG2REG reg2reg
+  #endif
   stencilParaT;
   //basic pointer
   cg::grid_group gg = cg::this_grid();
@@ -464,7 +561,6 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
     //north south
     {
       //register
-      // #if REG_FOLER_Y!=0 || SM_FOLER_Y!=0
       if(UseRegCache||UseSMCache)
       {  // #pragma unroll
         _Pragma("unroll")
@@ -529,8 +625,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
       computation<REAL,LOCAL_TILE_Y,halo>(sum,
                                       sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
                                       r_smbuffer, halo,
-                                      west, east,
-                                      north,south,  center);
+                                      stencilParaInput);
       reg2global<REAL,LOCAL_TILE_Y,LOCAL_TILE_Y>(sum, __var_4__, 
                   global_y,p_y_cache, 
                   p_x+local_x, width_x);
@@ -570,8 +665,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
         computation<REAL,LOCAL_TILE_Y,halo,sizeof_rspace>(sum,
                                       sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
                                       r_space, local_y+halo,
-                                      west, east,
-                                      north,south,  center);
+                                      stencilParaInput);
         reg2reg<REAL, LOCAL_TILE_Y, sizeof_rspace, LOCAL_TILE_Y>(sum,r_space,
                                       0, local_y);
         __syncthreads();
@@ -612,8 +706,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
         computation<REAL,LOCAL_TILE_Y,halo>(sum,
                                     sm_space, ps_y+local_y, local_x+ps_x, tile_x_with_halo,
                                     r_smbuffer, halo,
-                                    west, east,
-                                    north,south,  center);
+                                    stencilParaInput);
         __syncthreads();
         reg2sm<REAL, LOCAL_TILE_Y, LOCAL_TILE_Y>(sum, sm_space,
                                     ps_y+local_y,
@@ -779,6 +872,8 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
                                     tid);
   }
   #undef UseRegCache
+  #undef SM2REG
+  #undef REG2REG
 }
 #endif
 
@@ -796,13 +891,27 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
 
 {
 
+  #ifdef BOX
+    #define SM2REG sm2regs
+    #define REG2REG regs2regs
+    #define isBOX (halo)
+  #else
+    #define SM2REG sm2reg
+    #define REG2REG reg2reg
+    #define isBOX (0)
+  #endif
+
   stencilParaT;
   extern __shared__ char sm[];
   
   REAL* sm_space = (REAL*)sm+1;
   REAL* sm_rbuffer = sm_space;
 
+#ifndef BOX
   register REAL r_smbuffer[2*halo+LOCAL_TILE_Y];
+#else
+  register REAL r_smbuffer[2*halo+1][2*halo+LOCAL_TILE_Y];
+#endif
 
   const int tid = threadIdx.x;
   // int ps_x = Halo + tid;
@@ -848,7 +957,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
 
       //__syncthreads();
       //shared memory buffer -> register buffer
-      sm2reg<REAL,halo*2+LOCAL_TILE_Y, halo*2+LOCAL_TILE_Y>(sm_rbuffer, r_smbuffer, 
+      SM2REG<REAL,halo*2+LOCAL_TILE_Y, halo*2+LOCAL_TILE_Y,isBOX>(sm_rbuffer, r_smbuffer, 
                                                     0,
                                                     ps_x, tid,
                                                     tile_x_with_halo);
@@ -861,8 +970,7 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
       computation<REAL,LOCAL_TILE_Y,halo>(sum,
                                       sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
                                       r_smbuffer, halo,
-                                      west, east,
-                                      north,south,  center);
+                                      stencilParaInput);
 
       //store to global
       reg2global<REAL,LOCAL_TILE_Y,LOCAL_TILE_Y>(sum, __var_4__, 
@@ -885,6 +993,9 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
       input=tmp_ptr;
     #endif
   }
+  #undef SM2REG
+  #undef REG2REG
+  #undef isBOX
 } 
 #endif
 
@@ -896,6 +1007,8 @@ __global__ void kernel2d_restrict(REAL* input,
   stencilParaT;
   int l_x = blockDim.x * blockIdx.x + threadIdx.x;  
   int l_y = blockDim.y * blockIdx.y + threadIdx.y;
+
+#ifndef BOX
   int c = l_x + l_y * width_x;
   int w[halo];
   int e[halo];
@@ -933,6 +1046,32 @@ __global__ void kernel2d_restrict(REAL* input,
   }
   output[c]=sum;
   return;
+#else
+  int vertical[Halo*2+1];
+  int horizontal[Halo*2+1];
+  #pragma unroll
+  for(int hl_y=-Halo; hl_y<=Halo; hl_y++)
+  {
+    vertical[hl_y+Halo]=MIN(MAX(l_y+hl_y,0),width_y-1)*width_x;
+  }
+  #pragma unroll
+  for(int hl_x=-Halo; hl_x<=Halo; hl_x++)
+  {
+    horizontal[hl_x+Halo]=MIN(MAX(l_x+hl_x,0),width_x-1);
+  }
+  REAL sum=0;
+  #pragma unroll
+  for(int hl_y=-Halo; hl_y<=Halo; hl_y++)
+  {
+    #pragma unroll 
+    for(int hl_x=-Halo; hl_x<=Halo; hl_x++)
+    {
+      sum+=filter[hl_y+Halo][hl_x+Halo]*input[vertical[hl_y+Halo]  + horizontal[hl_x+Halo]];
+    }
+  }
+  output[vertical[Halo]  + horizontal[Halo]]=sum;
+  return;
+#endif
 }
 #endif
 
@@ -1047,7 +1186,7 @@ size_t max_sm_flder=0;
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
 #ifndef __PRINT__
-  printf("the max flder is %d and the total sm size is %d\n", max_sm_flder, executeSM);
+  printf("the max flder is %ld and the total sm size is %ld\n", max_sm_flder, executeSM);
 #endif
 
   //size_t sharememory3=sharememory_basic+(Halo*2*(TILE_Y))*sizeof(REAL);
