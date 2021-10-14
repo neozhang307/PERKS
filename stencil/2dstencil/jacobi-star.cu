@@ -74,9 +74,9 @@ void Check_CUDA_Error(const char* message);
 // #define SM_FOLER_Y (2)
 // #endif
 // Register Files folder of basic tiling
-#ifndef REG_FOLDER_Y
-#define REG_FOLDER_Y (6)
-#endif
+// #ifndef REG_FOLDER_Y
+// #define REG_FOLDER_Y (6)
+// #endif
 // Total 
 #define ISINITI (true)
 #define NOTINITIAL (false)
@@ -84,7 +84,7 @@ void Check_CUDA_Error(const char* message);
 #define NOSYNC (false)
 
 //#undef TILE_Y
-// #define USESM
+#define USESM
 
 #ifdef USESM
   #define USESMSET (true)
@@ -111,6 +111,7 @@ void Check_CUDA_Error(const char* message);
   #define stencilParaList const REAL west[6],const REAL east[6],const REAL north[6],const REAL south[6],const REAL center
   #define stencilParaInput  west,east,north,south,center
   #define R_PTR r_ptr[INPUTREG_SIZE]
+  #define isBOX (0)
 #else
   #if Halo==1
   #define stencilParaT \
@@ -134,6 +135,7 @@ void Check_CUDA_Error(const char* message);
   #define stencilParaList const REAL filter[halo*2+1][halo*2+1]
   #define stencilParaInput  filter
   #define R_PTR r_ptr[2*halo+1][INPUTREG_SIZE]
+  #define isBOX (halo)
 #endif
 
 
@@ -469,7 +471,8 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
   cg::grid_group gg = cg::this_grid();
   //extern __shared__ REAL sm[];
   extern __shared__ char sm[];
- 
+
+
   const int total_sm_tile_y = LOCAL_TILE_Y*max_sm_flder;//SM_FOLER_Y;//consider how to automatically compute it later
   const int total_reg_tile_y = LOCAL_TILE_Y*reg_folder_y;
   const int total_tile_y = total_sm_tile_y+total_reg_tile_y;
@@ -620,7 +623,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
                                           p_x, width_x,
                                           ps_y+halo, ps_x, tile_x_with_halo,
                                           tid);
-      sm2reg<REAL,sizeof_rbuffer, sizeof_rbuffer>(sm_rbuffer, r_smbuffer, 
+      SM2REG<REAL,sizeof_rbuffer, sizeof_rbuffer,isBOX>(sm_rbuffer, r_smbuffer, 
                                                     0,
                                                     ps_x, tid,
                                                     tile_x_with_halo);
@@ -640,41 +643,41 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
     __syncthreads();
     //computation of register space
 
-    if(UseRegCache)
-    {
-      _Pragma("unroll")
-      for(int local_y=0; local_y<total_reg_tile_y; local_y+=LOCAL_TILE_Y)
-      {
-        //load data sm to buffer register
-        //deal with ew boundary
-        _Pragma("unroll")
-        for(int l_y=tid; l_y<LOCAL_TILE_Y; l_y+=blockDim.x)
-        {
-          _Pragma("unroll")
-          for(int l_x=0; l_x<halo; l_x++)
-          {
-            // east
-            sm_rbuffer[(l_y+ps_y)*tile_x_with_halo+ tile_x + ps_x + l_x]=boundary_buffer[e_step + l_y + local_y + l_x * boundary_line_size];
-            // west
-            sm_rbuffer[(l_y+ps_y)*tile_x_with_halo+(-halo) + ps_x + l_x]=boundary_buffer[w_step + l_y + local_y + l_x * boundary_line_size];
-          }
-        }
-        reg2sm<REAL, sizeof_rspace, LOCAL_TILE_Y>(r_space, sm_rbuffer, 
-                                                          ps_y, ps_x, tid, tile_x_with_halo, local_y+halo);
+    // if(UseRegCache)
+    // {
+    //   _Pragma("unroll")
+    //   for(int local_y=0; local_y<total_reg_tile_y; local_y+=LOCAL_TILE_Y)
+    //   {
+    //     //load data sm to buffer register
+    //     //deal with ew boundary
+    //     _Pragma("unroll")
+    //     for(int l_y=tid; l_y<LOCAL_TILE_Y; l_y+=blockDim.x)
+    //     {
+    //       _Pragma("unroll")
+    //       for(int l_x=0; l_x<halo; l_x++)
+    //       {
+    //         // east
+    //         sm_rbuffer[(l_y+ps_y)*tile_x_with_halo+ tile_x + ps_x + l_x]=boundary_buffer[e_step + l_y + local_y + l_x * boundary_line_size];
+    //         // west
+    //         sm_rbuffer[(l_y+ps_y)*tile_x_with_halo+(-halo) + ps_x + l_x]=boundary_buffer[w_step + l_y + local_y + l_x * boundary_line_size];
+    //       }
+    //     }
+    //     reg2sm<REAL, sizeof_rspace, LOCAL_TILE_Y>(r_space, sm_rbuffer, 
+    //                                                       ps_y, ps_x, tid, tile_x_with_halo, local_y+halo);
         
         
-        __syncthreads();
-        REAL sum[LOCAL_TILE_Y];
-        init_reg_array<REAL,LOCAL_TILE_Y>(sum,0); 
-        computation<REAL,LOCAL_TILE_Y,halo,sizeof_rspace>(sum,
-                                      sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
-                                      r_space, local_y+halo,
-                                      stencilParaInput);
-        reg2reg<REAL, LOCAL_TILE_Y, sizeof_rspace, LOCAL_TILE_Y>(sum,r_space,
-                                      0, local_y);
-        __syncthreads();
-      }
-    }
+    //     __syncthreads();
+    //     REAL sum[LOCAL_TILE_Y];
+    //     init_reg_array<REAL,LOCAL_TILE_Y>(sum,0); 
+    //     computation<REAL,LOCAL_TILE_Y,halo,sizeof_rspace>(sum,
+    //                                   sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
+    //                                   r_space, local_y+halo,
+    //                                   stencilParaInput);
+    //     reg2reg<REAL, LOCAL_TILE_Y, sizeof_rspace, LOCAL_TILE_Y>(sum,r_space,
+    //                                   0, local_y);
+    //     __syncthreads();
+    //   }
+    // }
     if(UseSMCache)
     //computation of share memory space
     {
@@ -692,14 +695,19 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
       }
       __syncthreads();
       //computation of shared space 
-      sm2reg<REAL,sizeof_rbuffer,2*halo>(sm_space, r_smbuffer, 
+      // SM2REG<REAL,sizeof_rbuffer,2*halo,isBOX>(sm_space, r_smbuffer, 
+      //                                     0, 
+      //                                     ps_x, tid,
+      //                                     tile_x_with_halo,
+      //                                     0);
+      SM2REG<REAL,sizeof_rbuffer,2*halo,isBOX>(sm_rbuffer, r_smbuffer, 
                                           0, 
                                           ps_x, tid,
                                           tile_x_with_halo,
                                           0);
       for ( size_t local_y = 0; local_y < total_sm_tile_y; local_y+=LOCAL_TILE_Y) 
       {
-        sm2reg<REAL,sizeof_rbuffer,LOCAL_TILE_Y>(sm_space, r_smbuffer, 
+        SM2REG<REAL,sizeof_rbuffer,LOCAL_TILE_Y,isBOX>(sm_space, r_smbuffer, 
                                           ps_y+local_y+halo, 
                                           ps_x, tid,
                                           tile_x_with_halo,
@@ -718,7 +726,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
                                     tile_x_with_halo,
                                     0);
         __syncthreads();
-        reg2reg<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo>
+        REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
                 (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
       }
     }
@@ -898,11 +906,9 @@ __global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int widt
   #ifdef BOX
     #define SM2REG sm2regs
     #define REG2REG regs2regs
-    #define isBOX (halo)
   #else
     #define SM2REG sm2reg
     #define REG2REG reg2reg
-    #define isBOX (0)
   #endif
 
   stencilParaT;
