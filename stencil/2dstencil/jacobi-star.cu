@@ -84,7 +84,7 @@ void Check_CUDA_Error(const char* message);
 #define NOSYNC (false)
 
 //#undef TILE_Y
-#define USESM
+// #define USESM
 
 #ifdef USESM
   #define USESMSET (true)
@@ -813,7 +813,7 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
     if(UseSMCache||UseRegCache)
     {
       _Pragma("unroll")
-      for(int lid=tid; lid<boundary_line_size; lid+=blockDim.x)
+      for(int lid=tid; lid<boundary_line_size-isBOX; lid+=blockDim.x)
       {
         //east
         _Pragma("unroll")
@@ -844,12 +844,13 @@ __global__ void kernel_general(REAL * __restrict__ input, int width_y, int width
         _Pragma("unroll")
         for(int l_x=0; l_x<halo; l_x++)
         {
-          //east
+          int cache_y=min(p_y_cache + local_y,width_y-1);
+          // east
            boundary_buffer[e_step+local_y+l_x*boundary_line_size] = ((blockIdx.x == gridDim.x-1)?boundary_buffer[e_step+local_y+(halo-1)*boundary_line_size]:
-             l2_cache_i[(((blockIdx.x+1)*2+0)* halo+l_x)*width_y + p_y_cache + local_y]);
+             l2_cache_i[(((blockIdx.x+1)*2+0)* halo+l_x)*width_y + cache_y]);
            //west
            boundary_buffer[w_step+local_y+l_x*boundary_line_size] = ((blockIdx.x == 0)?boundary_buffer[w_step+local_y+0*boundary_line_size]:
-            l2_cache_i[(((blockIdx.x-1)*2+1)* halo+l_x)*width_y + p_y_cache + local_y]);
+            l2_cache_i[(((blockIdx.x-1)*2+1)* halo+l_x)*width_y + cache_y]);
         }
       }
       for(int local_y=tid; local_y<isBOX&&p_y_cache + local_y + boundary_line_size-isBOX<width_y; local_y+=blockDim.x)
@@ -1207,13 +1208,14 @@ size_t max_sm_flder=0;
   #define halo Halo
   #if defined(GEN) || defined(MIX)
   max_sm_flder=(SharedMemoryUsed/sizeof(REAL)
+                          -2*Halo*isBOX
                           -basic_sm_space
-                          -2*Halo*(REG_FOLDER_Y+isBOX)*RTILE_Y
+                          -2*Halo*(REG_FOLDER_Y)*RTILE_Y
                           -2*Halo*(TILE_X+2*Halo))/(TILE_X+4*Halo)/RTILE_Y;
 
   // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
   size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*Halo)*(TILE_X+2*Halo)*sizeof(REAL);
-  size_t y_axle_halo = (Halo*2*(max_sm_flder + REG_FOLDER_Y + isBOX)*RTILE_Y)*sizeof(REAL);
+  size_t y_axle_halo = (Halo*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
   #undef halo
@@ -1326,8 +1328,6 @@ size_t max_sm_flder=0;
   cudaEventCreate(&_forma_timer_stop_);
   cudaEventRecord(_forma_timer_start_,0);
 #endif
-
-
 #ifdef MIX
   if(SM_FOLER_Y!=0)
   {
@@ -1338,8 +1338,6 @@ size_t max_sm_flder=0;
     cudaLaunchCooperativeKernel((void*)kernel_mix_reg, grid_dim, block_dim, KernelArgs2,sharememory4,0);
   }
 #endif
-
-//
 #ifdef PERSISTENTLAUNCH
   cudaLaunchCooperativeKernel((void*)execute_kernel, 
             executeGridDim, executeBlockDim, 

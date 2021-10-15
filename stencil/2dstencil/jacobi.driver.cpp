@@ -26,26 +26,18 @@ void printdiff(REAL* out, REAL* ref, int widthx, int widthy)
   }
 }
 
-//template<class REAL>
-//void runTest()
-//{
-//
-//}
-//#ifndef HALO 
-//  #define HALO 1
-//#endif
-
 int main(int argc, char const *argv[])
 {
   int width_x; 
   int width_y;
   int iteration;
   width_x=width_y=4096;
-  width_y=64;
+  // width_y=100;
 #ifdef REFCHECK
-  iteration=4;
+
+  iteration=1;
 #else
-  iteration=1000;
+  iteration=5;
 #endif
   #define REAL float
   

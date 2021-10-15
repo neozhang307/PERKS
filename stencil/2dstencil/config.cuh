@@ -14,7 +14,7 @@
     #elif __CUDA_ARCH__==700
         #define PERKS_ARCH 700
     #elif __CUDA_ARCH__==600
-        #define PERKS_ARCH 600
+        #define  600
     #else
         #error "unsupport"
     #endif
@@ -22,20 +22,32 @@
 
 #if defined(js2d5pt)
     #define HALO (1)
+    #define REG_FOLDER_Y (5)
+    
 #elif defined(js2d9pt)
     #define HALO (2)
+    #define REG_FOLDER_Y (10)
 #elif defined(js2d13pt)
-    #define HALO (2)
-#elif defined(js2d17pt)
     #define HALO (3)
-#elif defined(js2d21pt)
+    #define REG_FOLDER_Y (10)
+#elif defined(js2d17pt)
     #define HALO (4)
-#elif defined(js2d25pt)
+    #define REG_FOLDER_Y (10)
+#elif defined(js2d21pt)
     #define HALO (5)
+    #define REG_FOLDER_Y (10)
+#elif defined(js2d25pt)
+    #define HALO (6)
+    #define REG_FOLDER_Y (10)
 #elif defined(jb2d9pt)
     #define HALO (1)
+    #define BOX
+    #define REG_FOLDER_Y (0)
 #elif defined(jb2d25pt)
     #define HALO (2)
+    #define BOX
+    #define REG_FOLDER_Y (0)
+    
 #endif
 
 #ifndef Halo 
