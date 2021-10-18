@@ -16,7 +16,6 @@ add_library(${type}_jacobi_gold ./jacobi_gold.cpp)
 add_library(${type}_jacobi_gold_gen ./jacobi_gold_gen.cpp)
 
 #SET(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-enable_language(CUDA)
 #project(${reference_goal} CXX CUDA)
 project(${reference_goal} CUDA)
 add_executable(${reference_goal} ${CMAKE_SOURCE_DIR}/jacobi.driver.cpp)
@@ -27,9 +26,9 @@ set_target_properties(${reference_goal} PROPERTIES
 
 #project(${naive_goal} CUDA)
 set(archlist " -gencode arch=compute_80,code=sm_80 ")
-string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
+# string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
 
-set(DEFAULT_COMPILER_FLAG "-D_TIMER_ -DWARMUPRUN -Xptxas \"-v -dlcm=cg\"")
+set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,CHECK -DWARMUPRUN -Xptxas \"-v -dlcm=cg\"")
 string(APPEND DEFAULT_COMPILER_FLAG "${archlist}")
 
 function(subcompile prefix default_compiler_flag aim)
@@ -54,7 +53,7 @@ function(subcompile prefix default_compiler_flag aim)
     #include(CMakeParseArguments)
     
     #set(local_prefix LOCAL)
-    set(multiValues SOURCE DRIVER)
+    set(multiValues SOURCE DRIVER LIB)
 
     cmake_parse_arguments(PARSE_ARGV 2 "LOCAL"
                      ""
@@ -63,6 +62,7 @@ function(subcompile prefix default_compiler_flag aim)
 
     message("${LOCAL_SOURCE}")
     message("${LOCAL_DRIVER}")
+    message("${LOCAL_LIB}")
 
     add_library(${libraryname} ${LOCAL_SOURCE})
     #add_library(${libraryname} ${CMAKE_SOURCE_DIR}/jacobi-star.cu)
@@ -70,14 +70,31 @@ function(subcompile prefix default_compiler_flag aim)
 
     add_executable(${local_goal} ${LOCAL_DRIVER})
     #add_executable(${local_goal} ${CMAKE_SOURCE_DIR}/jacobi.driver.cpp)
-    target_link_libraries(${local_goal} PUBLIC ${libraryname} ${prefix}_jacobi_gold ${prefix}_jacobi_gold_gen)
+    target_link_libraries(${local_goal} PUBLIC ${libraryname} ${LOCAL_LIB} ${prefix}_jacobi_gold ${prefix}_jacobi_gold_gen)
+endfunction()
+#find_library("jacobi_naive")
+function(mylib sublib subkernelfile compiler_flag)
+    add_library("${sublib}" "${subkernelfile}")
+    set_target_properties("${sublib}" PROPERTIES COMPILE_FLAGS "${compiler_flag}")
 endfunction()
 
-#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-star.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+mylib("jacobi_naive" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" "${DEFAULT_COMPILER_FLAG}")
+mylib("jacobi_baseline" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}")
+mylib("jacobi_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT")
+mylib("jacobi_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG}")
+# add_library("jacobi_naive" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu")
+# set_target_properties("jacobi_naive" PROPERTIES COMPILE_FLAGS "${DEFAULT_COMPILER_FLAG}")
+
+# add_library("jacobi_naive" IMPORTED GLOBAL)
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "jacobi_naive")
+# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
+# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "jacobi_baseline")
+#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "jacobi_persistent")
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "jacobi_gen")
 
 #subcompile(type DEFAULT_COMPILER_FLAG "BASELINE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen)
 #subcompile(${type} DEFAULT_COMPILER_FLAG "NAIVE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen )

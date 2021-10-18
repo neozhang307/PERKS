@@ -6,5 +6,16 @@
     template _macro(float);\
     template _macro(double)
 
+#define PERKS_INITIALIZE_ALL_TYPE_1ARG(_macro,halo) \
+    template _macro(float,halo);\
+    template _macro(double,halo)
+
+#define PERKS_INITIALIZE_ALL_TYPE_2ARG(_macro,a,b) \
+    template _macro(float,a,b);\
+    template _macro(double,a,b)
+
+#define PERKS_INITIALIZE_ALL_TYPE_4ARG(_macro,a,b,c,d) \
+    template _macro(float,a,b,c,d);\
+    template _macro(double,a,b,c,d)
 #endif
 
