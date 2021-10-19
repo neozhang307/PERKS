@@ -1,7 +1,7 @@
-#include "./common/cuda_computation.cuh"
-#include "./common/types.hpp"
 #include "./config.cuh"
-// #include "./common/cuda_common.cuh"
+#include "./common/types.hpp"
+#include "./common/cuda_computation.cuh"
+#include "./common/cuda_common.cuh"
 #include <math.h>
 
 template<class REAL, int halo>
@@ -61,12 +61,12 @@ kernel2d_restrict_box
   #pragma unroll
   for(int hl_y=-Halo; hl_y<=Halo; hl_y++)
   {
-    vertical[hl_y+Halo]=MIN(MAX(l_y+hl_y,0),width_y-1)*width_x;
+    vertical[hl_y+Halo]=min(max(l_y+hl_y,0),width_y-1)*width_x;
   }
   #pragma unroll
   for(int hl_x=-Halo; hl_x<=Halo; hl_x++)
   {
-    horizontal[hl_x+Halo]=MIN(MAX(l_x+hl_x,0),width_x-1);
+    horizontal[hl_x+Halo]=min(max(l_x+hl_x,0),width_x-1);
   }
   REAL sum=0;
   #pragma unroll

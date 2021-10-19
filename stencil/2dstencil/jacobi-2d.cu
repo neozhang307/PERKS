@@ -645,7 +645,11 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 
 //initialization
 #if defined(PERSISTENT)
+  #ifndef BOX
   auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,Halo>;
+  #else
+  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,Halo>;
+  #endif
 #endif
 #if defined(BASELINE_CM)||defined(BASELINE)
   #ifndef BOX
@@ -662,7 +666,11 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
   #endif
 #endif 
 #ifdef GEN
+  #ifndef BOX
   auto execute_kernel = kernel_general<REAL,RTILE_Y,Halo,REG_FOLDER_Y,true>;
+  #else
+  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,Halo,REG_FOLDER_Y,true>;
+  #endif
   //auto execute_kernel = kernel_general<REAL,RTILE_Y,Halo,REG_FOLDER_Y,UseSMCache>;
 #endif
   int sm_count;

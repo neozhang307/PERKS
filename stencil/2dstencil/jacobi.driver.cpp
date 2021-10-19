@@ -34,7 +34,6 @@ int main(int argc, char const *argv[])
   width_x=width_y=4096;
   // width_y=100;
 #ifdef REFCHECK
-
   iteration=1;
 #else
   iteration=5;

@@ -1,7 +1,7 @@
+#include "./config.cuh"
 #include "./common/cuda_computation.cuh"
 #include "./common/cuda_common.cuh"
 #include "./common/types.hpp"
-#include "./config.cuh"
 #include <math.h>
 
 #include <cooperative_groups.h>
@@ -21,11 +21,23 @@ namespace cg = cooperative_groups;
 
 template<class REAL, int LOCAL_TILE_Y, int halo=Halo>
 #ifdef PERSISTENT
-__global__ void kernel_persistent_baseline(REAL * __restrict__ input, int width_y, int width_x, 
+__global__ void 
+#ifndef BOX
+kernel_persistent_baseline
+#else
+kernel_persistent_baseline_box
+#endif
+(REAL * __restrict__ input, int width_y, int width_x, 
   REAL *__restrict__ __var_4__,REAL *__restrict__ l2_cache, REAL *__restrict__ l2_cachetmp, 
   int iteration)
 #else
-__global__ void kernel_baseline(REAL * __restrict__ input, int width_y, int width_x, 
+__global__ void 
+#ifndef BOX
+kernel_baseline
+#else
+kernel_baseline_box
+#endif
+(REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__)
 #endif
 

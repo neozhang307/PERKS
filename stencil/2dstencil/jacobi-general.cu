@@ -1,8 +1,8 @@
+#include "./config.cuh"
+#include "./genconfig.cuh"
 #include "./common/cuda_computation.cuh"
 #include "./common/cuda_common.cuh"
 #include "./common/types.hpp"
-#include "./config.cuh"
-#include "./genconfig.cuh"
 #include <math.h>
 
 #include <cooperative_groups.h>
@@ -27,7 +27,13 @@ namespace cg = cooperative_groups;
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
-__global__ void kernel_general(REAL * __restrict__ input, int width_y, int width_x, 
+__global__ void 
+#ifndef BOX
+kernel_general
+#else
+kernel_general_box
+#endif
+(REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__, 
   REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
   int iteration,

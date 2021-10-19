@@ -29,12 +29,12 @@
   #define isBOX (0)
 #else
   #if Halo==1
-  #define stencilParaT \
-  const REAL filter[3][3] = {\
-    {7.0/118, 5.0/118, 9.0/118},\
-    {12.0/118,15.0/118,12.0/118},\
-    {9.0/118, 5.0/118, 7.0/118}\
-  };
+    #define stencilParaT \
+    const REAL filter[3][3] = {\
+        {7.0/118, 5.0/118, 9.0/118},\
+        {12.0/118,15.0/118,12.0/118},\
+        {9.0/118, 5.0/118, 7.0/118}\
+    };
   #endif
   #if Halo==2
   #define stencilParaT \
@@ -46,7 +46,6 @@
     {10.0/118, 11.0/118, 12.0/118, 13.0/118, 14.0/118}\
   };
   #endif
-
   #define stencilParaList const REAL filter[halo*2+1][halo*2+1]
   #define stencilParaInput  filter
   #define R_PTR r_ptr[2*halo+1][INPUTREG_SIZE]
