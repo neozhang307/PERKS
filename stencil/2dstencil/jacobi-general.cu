@@ -1,7 +1,7 @@
 #include "./config.cuh"
 #include "./genconfig.cuh"
-#include "./common/cuda_computation.cuh"
 #include "./common/cuda_common.cuh"
+#include "./common/cuda_computation.cuh"
 #include "./common/types.hpp"
 #include <math.h>
 
@@ -17,13 +17,13 @@
 
 namespace cg = cooperative_groups;
 
-#define USESM
+// #define USESM
 
-#ifdef USESM
-  #define USESMSET (true)
-#else
-  #define USESMSET (false)
-#endif
+// #ifdef USESM
+//   #define USESMSET (true)
+// #else
+//   #define USESMSET (false)
+// #endif
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
@@ -172,6 +172,12 @@ kernel_general_box
           {
             //need to deal with boundary
             sm_space[(ps_y +total_sm_tile_y + l_y) * tile_x_with_halo + tid + ps_x]=(input[(global_y) * width_x + p_x + tid]);
+            // global2sm<REAL,isBOX,true,false>(input,sm_space,
+            //                             halo,
+            //                             p_y_cache+total_reg_tile_y+total_sm_tile_y, width_y,
+            //                             p_x, width_x,
+            //                             ps_y+total_sm_tile_y, ps_x, tile_x_with_halo,
+            //                             tid);
           }
           else
           {
@@ -276,7 +282,7 @@ kernel_general_box
     //computation of share memory space
     {
       //load shared memory boundary
-      for(int local_y=tid; local_y<total_sm_tile_y; local_y+=blockDim.x)
+      for(int local_y=tid; local_y<total_sm_tile_y+isBOX; local_y+=blockDim.x)
       {
         // _Pragma("unroll")
         for(int l_x=0; l_x<halo; l_x++)
@@ -489,7 +495,9 @@ kernel_general_box
 
 
 #ifndef BOX
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,USESMSET);
+    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,true);
+    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,false);
 #else
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_BOX,RTILE_Y,HALO,REG_FOLDER_Y,USESMSET);
+    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_BOX,RTILE_Y,HALO,REG_FOLDER_Y,true);
+    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_BOX,RTILE_Y,HALO,REG_FOLDER_Y,false);
 #endif

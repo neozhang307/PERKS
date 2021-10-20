@@ -7,7 +7,6 @@
 #include <cstring>
 #include <sys/time.h>
 
-#define TOLERANCE 1e-5
 
 struct double4 {
   double x;
