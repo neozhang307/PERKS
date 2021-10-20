@@ -1,4 +1,4 @@
- # Setting
+#Setting
 2d stencil 
 Can config the desired setting in [stencil type]/config.cuh 
   Halo: the halo reagion for the [stencil type]
