@@ -1,4 +1,4 @@
-#Setting
+ # Setting
 2d stencil 
 Can config the desired setting in [stencil type]/config.cuh 
   Halo: the halo reagion for the [stencil type]
@@ -9,12 +9,12 @@ Can config the desired setting in [stencil type]/config.cuh
   Need this setting to determine the total register usage. 
   Currently, only total_reg=reg_fold*RTILE_Y is supported. 
 
-#Usage:
+ # Usage:
   run ./config.sh
   run ./build.sh
   the builded excutable files is generated in ./build/init/
   
-#TODO
+ # TODO
   1. automatically set register amount (feasically doable), can be refer to ./ProcessCompilerLog.py [WORKING ON IT]
   2. better print method
   3. portability (**CAUTION**)
