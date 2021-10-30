@@ -1,5 +1,7 @@
-#include "./config.cuh"
-#include "./genconfig.cuh"
+#ifndef CONFIGURE
+  #include "./config.cuh"
+  #include "./genconfig.cuh"
+#endif
 #include "./common/cuda_common.cuh"
 #include "./common/cuda_computation.cuh"
 #include "./common/types.hpp"
@@ -16,14 +18,6 @@
 #endif
 
 namespace cg = cooperative_groups;
-
-// #define USESM
-
-// #ifdef USESM
-//   #define USESMSET (true)
-// #else
-//   #define USESMSET (false)
-// #endif
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
@@ -171,13 +165,14 @@ kernel_general_box
           if(UseSMCache)
           {
             //need to deal with boundary
-            sm_space[(ps_y +total_sm_tile_y + l_y) * tile_x_with_halo + tid + ps_x]=(input[(global_y) * width_x + p_x + tid]);
-            // global2sm<REAL,isBOX,true,false>(input,sm_space,
-            //                             halo,
-            //                             p_y_cache+total_reg_tile_y+total_sm_tile_y, width_y,
-            //                             p_x, width_x,
-            //                             ps_y+total_sm_tile_y, ps_x, tile_x_with_halo,
-            //                             tid);
+            // sm_space[(ps_y +total_sm_tile_y + l_y) * tile_x_with_halo + tid + ps_x]=(input[(global_y) * width_x + p_x + tid]);
+            global2sm<REAL,0,true,false>(input,sm_space,
+            //global2sm<REAL,isBOX,true,false>(input,sm_space,
+                                        halo,
+                                        global_y, width_y,
+                                        p_x, width_x,
+                                        ps_y+total_sm_tile_y, ps_x, tile_x_with_halo,
+                                        tid);
           }
           else
           {
@@ -493,11 +488,28 @@ kernel_general_box
   #undef REG2REG
 }
 
+#ifndef CONFIGURE
 
-#ifndef BOX
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,true);
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #ifndef BOX
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,true);
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #else
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,true);
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #endif
+
 #else
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_BOX,RTILE_Y,HALO,REG_FOLDER_Y,true);
-    PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_BOX,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #ifdef USESM
+    #define isUSESM true
+  #else
+    #define isUSESM false
+  #endif
+  template __global__ void 
+  #ifndef BOX
+  kernel_general
+  #else
+  kernel_general_box
+  #endif
+  <TYPE,RTILE_Y,HALO,REG_FOLDER_Y,isUSESM>
+  (TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int, int);
 #endif

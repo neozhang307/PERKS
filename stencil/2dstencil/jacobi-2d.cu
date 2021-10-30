@@ -12,13 +12,7 @@
 #include "./common/cuda_common.cuh"
 #include "./common/cuda_computation.cuh"
 
-#ifdef SMASYNC
-  #if PERKS_ARCH<800 
-    #error "unsupport architecture"
-  #endif
-  #include <cooperative_groups/memcpy_async.h>
-  #include <cuda_pipeline.h>
-#endif
+
 
 #ifdef GEN
 #include "./genconfig.cuh"
@@ -76,14 +70,14 @@ void host_printptx()
 
 #define bdim_x (TILE_X)
 
-#define BASIC_TILE_X (TILE_X+2*Halo)
-#define BASIC_TILE_Y (RTILE_Y+2*Halo)
+#define BASIC_TILE_X (TILE_X+2*HALO)
+#define BASIC_TILE_Y (RTILE_Y+2*HALO)
 #define BASIC_SM_SPACE (BASIC_TILE_X)*(BASIC_TILE_Y)
 
 
 #define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
 #define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLDER_Y)
-#define TOTAL_SM_CACHE_SPACE (TILE_X+2*Halo)*(TOTAL_SM_TILE_Y+2*Halo)
+#define TOTAL_SM_CACHE_SPACE (TILE_X+2*HALO)*(TOTAL_SM_TILE_Y+2*HALO)
 
 #define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
 
@@ -101,32 +95,32 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 //initialization
 #if defined(PERSISTENT)
   #ifndef BOX
-  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,Halo>;
+  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
   #else
-  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,Halo>;
+  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #if defined(BASELINE_CM)||defined(BASELINE)
   #ifndef BOX
-    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,Halo>;
+    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
   #else
-    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,Halo>;
+    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #ifdef NAIVE
   #ifndef BOX
-    auto execute_kernel = kernel2d_restrict<REAL,Halo>;
+    auto execute_kernel = kernel2d_restrict<REAL,HALO>;
   #else
-    auto execute_kernel = kernel2d_restrict_box<REAL,Halo>;
+    auto execute_kernel = kernel2d_restrict_box<REAL,HALO>;
   #endif
 #endif 
 #ifdef GEN
   #ifndef BOX
-  auto execute_kernel = kernel_general<REAL,RTILE_Y,Halo,REG_FOLDER_Y,true>;
+  auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>;
   #else
-  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,Halo,REG_FOLDER_Y,true>;
+  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>;
   #endif
-  //auto execute_kernel = kernel_general<REAL,RTILE_Y,Halo,REG_FOLDER_Y,UseSMCache>;
+  //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
 #endif
   int sm_count;
   cudaDeviceGetAttribute ( &sm_count, cudaDevAttrMultiProcessorCount,0 );
@@ -147,12 +141,12 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #if defined(GEN) || defined(MIX)|| defined(PERSISTENT)
   REAL * L2_cache3;
   REAL * L2_cache4;
-  size_t L2_utage_2 = sizeof(REAL)*(width_y)*2*(width_x/bdim_x)*Halo;
+  size_t L2_utage_2 = sizeof(REAL)*(width_y)*2*(width_x/bdim_x)*HALO;
 #ifndef __PRINT__
   printf("l2 cache used is %ld KB : 4096 KB \n",L2_utage_2*2/1024);
 #endif
   cudaMalloc(&L2_cache3,L2_utage_2*2);
-  L2_cache4=L2_cache3+(width_y)*2*(width_x/bdim_x)*Halo;
+  L2_cache4=L2_cache3+(width_y)*2*(width_x/bdim_x)*HALO;
 #endif
 
   //initialize shared memory
@@ -168,7 +162,7 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 size_t executeSM = 0;
 #ifndef NAIVE
   //shared memory used for compuation
-  int basic_sm_space=(RTILE_Y+2*Halo)*(TILE_X+2*Halo);
+  int basic_sm_space=(RTILE_Y+2*HALO)*(TILE_X+2*HALO);
   size_t sharememory_basic=(1+basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
 
@@ -178,18 +172,18 @@ size_t executeSM = 0;
     size_t max_sm_flder=0;
   #endif 
 
-  #define halo Halo
+  #define halo HALO
   #if defined(GEN) || defined(MIX)
   size_t max_sm_flder=0;
   max_sm_flder=(SharedMemoryUsed/sizeof(REAL)
-                          -2*Halo*isBOX
+                          -2*HALO*isBOX
                           -basic_sm_space
-                          -2*Halo*(REG_FOLDER_Y)*RTILE_Y
-                          -2*Halo*(TILE_X+2*Halo))/(TILE_X+4*Halo)/RTILE_Y;
+                          -2*HALO*(REG_FOLDER_Y)*RTILE_Y
+                          -2*HALO*(TILE_X+2*HALO))/(TILE_X+4*HALO)/RTILE_Y;
 
   // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
-  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*Halo)*(TILE_X+2*Halo)*sizeof(REAL);
-  size_t y_axle_halo = (Halo*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(TILE_X+2*HALO)*sizeof(REAL);
+  size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
   #undef halo
@@ -197,7 +191,7 @@ size_t executeSM = 0;
   printf("the max flder is %ld and the total sm size is %ld\n", max_sm_flder, executeSM);
 #endif
 
-  //size_t sharememory3=sharememory_basic+(Halo*2*(TILE_Y))*sizeof(REAL);
+  //size_t sharememory3=sharememory_basic+(HALO*2*(TILE_Y))*sizeof(REAL);
   //size_t sharememory4=sharememory3-(STILE_SIZE*sizeof(REAL));
 #endif
 

@@ -32,7 +32,7 @@ int main(int argc, char const *argv[])
   int width_x; 
   int width_y;
   int iteration=3;
-  width_x=width_y=2048;//4096;
+  width_x=width_y=4096;//4096;
   // width_y=100;
 #ifdef REFCHECK
   iteration=4;

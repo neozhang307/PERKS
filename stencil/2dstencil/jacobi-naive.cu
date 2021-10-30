@@ -56,29 +56,29 @@ kernel2d_restrict_box
   output[c]=sum;
   return;
 #else
-  int vertical[Halo*2+1];
-  int horizontal[Halo*2+1];
+  int vertical[HALO*2+1];
+  int horizontal[HALO*2+1];
   #pragma unroll
-  for(int hl_y=-Halo; hl_y<=Halo; hl_y++)
+  for(int hl_y=-HALO; hl_y<=HALO; hl_y++)
   {
-    vertical[hl_y+Halo]=min(max(l_y+hl_y,0),width_y-1)*width_x;
+    vertical[hl_y+HALO]=min(max(l_y+hl_y,0),width_y-1)*width_x;
   }
   #pragma unroll
-  for(int hl_x=-Halo; hl_x<=Halo; hl_x++)
+  for(int hl_x=-HALO; hl_x<=HALO; hl_x++)
   {
-    horizontal[hl_x+Halo]=min(max(l_x+hl_x,0),width_x-1);
+    horizontal[hl_x+HALO]=min(max(l_x+hl_x,0),width_x-1);
   }
   REAL sum=0;
   #pragma unroll
-  for(int hl_y=-Halo; hl_y<=Halo; hl_y++)
+  for(int hl_y=-HALO; hl_y<=HALO; hl_y++)
   {
     #pragma unroll 
-    for(int hl_x=-Halo; hl_x<=Halo; hl_x++)
+    for(int hl_x=-HALO; hl_x<=HALO; hl_x++)
     {
-      sum+=filter[hl_y+Halo][hl_x+Halo]*input[vertical[hl_y+Halo]  + horizontal[hl_x+Halo]];
+      sum+=filter[hl_y+HALO][hl_x+HALO]*input[vertical[hl_y+HALO]  + horizontal[hl_x+HALO]];
     }
   }
-  output[vertical[Halo]  + horizontal[Halo]]=sum;
+  output[vertical[HALO]  + horizontal[HALO]]=sum;
   return;
 #endif
 }

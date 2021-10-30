@@ -19,7 +19,7 @@ namespace cg = cooperative_groups;
 
 // #if defined(BASELINE_CM)||defined(BASELINE)||defined(PERSISTENT)
 
-template<class REAL, int LOCAL_TILE_Y, int halo=Halo>
+template<class REAL, int LOCAL_TILE_Y, int halo>
 #ifdef PERSISTENT
 __global__ void 
 #ifndef BOX

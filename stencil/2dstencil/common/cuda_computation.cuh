@@ -28,7 +28,7 @@
   #define R_PTR r_ptr[INPUTREG_SIZE]
   #define isBOX (0)
 #else
-  #if Halo==1
+  #if HALO==1
     #define stencilParaT \
     const REAL filter[3][3] = {\
         {7.0/118, 5.0/118, 9.0/118},\
@@ -36,7 +36,7 @@
         {9.0/118, 5.0/118, 7.0/118}\
     };
   #endif
-  #if Halo==2
+  #if HALO==2
   #define stencilParaT \
   const REAL filter[5][5] = {\
     {1.0/118, 2.0/118, 3.0/118, 4.0/118, 5.0/118},\
@@ -187,5 +187,5 @@ __global__ void kernel_general_box( REAL * __restrict__ input, int width_y, int 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,tile,halo,rf,usesm) \
     __global__ void kernel_general<_type,tile,halo,rf,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
 
-#define PERKS_DECLARE_INITIONIZATION_GENERAL_BOX(_type,tile,halo,rf,usesm) \
+#define PERKS_DECLARE_INITIONIZATION_GENERALBOX(_type,tile,halo,rf,usesm) \
     __global__ void kernel_general_box<_type,tile,halo,rf,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);

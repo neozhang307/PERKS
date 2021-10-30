@@ -17,6 +17,13 @@
     #endif
 #endif
 
+#ifdef ASYNCSM
+  #if PERKS_ARCH<800 
+    #error "unsupport architecture"
+  #endif
+  #include <cooperative_groups/memcpy_async.h>
+  #include <cuda_pipeline.h>
+#endif
 
 #define CUDACOMMON
 extern __host__ __device__ __forceinline__ int MAX(int a, int b) { return a > b ? a : b; }
@@ -180,14 +187,14 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
         }
       }
     #else
-      __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+ps_x, 
-            src + (l_global_y) * global_x_size + MAX(glboal_x_base-halo+tid,0)
+      __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+sm_x_base, 
+            src + (l_global_y) * global_x_size + MAX(global_x_base-halo+tid,0)
               , sizeof(REAL));
       if(halo>0)
       {
         if(tid<halo*2)
         {
-          __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+blockDim.x+ps_x, 
+          __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+blockDim.x+sm_x_base, 
                   src + (l_global_y) * global_x_size + MIN(-halo+tid+blockDim.x+global_x_base,global_x_size-1)
                     , sizeof(REAL));
         }
