@@ -49,7 +49,7 @@ def parseptx(contents, funcname):
 import subprocess
 
 def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,box):
-    basicstring="nvcc --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256,REG_FOLDER_Y={3}{4}{5}{6} ./jacobi-general.cu"
+    basicstring="nvcc -std=c++11 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256,REG_FOLDER_Y={3}{4}{5}{6} ./jacobi-general.cu"
 
     generated_string=basicstring.format(archstring,halostring,realstring,regfolderstring,useSM,asyncSM,box)
     # print(generated_string)
@@ -108,17 +108,17 @@ halostring=1
 # box=",BOX"
 # box=""
 # HuseSMrealboxArch(1)
-print("star")
-print("80 sync")
-Hrange(1,6,"","arch=compute_80,code=sm_80","")
-print("80 async")
-Hrange(1,6,"","arch=compute_80,code=sm_80",",ASYNCSM")
-print("70")
-Hrange(1,6,"","arch=compute_80,code=sm_80","")
+# print("star")
+# print("80 sync")
+# Hrange(1,6,"","arch=compute_80,code=sm_80","")
+# print("80 async")
+# Hrange(1,6,"","arch=compute_80,code=sm_80",",ASYNCSM")
+# print("70")
+# Hrange(1,6,"","arch=compute_70,code=sm_70","")
 print("box")
 print("80 sync")
-Hrange(1,2,"","arch=compute_80,code=sm_80","")
+# Hrange(1,2,"","arch=compute_80,code=sm_80","")
 print("80 async")
 Hrange(1,2,"","arch=compute_80,code=sm_80",",ASYNCSM")
 print("70")
-Hrange(1,2,"","arch=compute_80,code=sm_80","")
+# Hrange(1,2,"","arch=compute_70,code=sm_70","")
