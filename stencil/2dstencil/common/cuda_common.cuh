@@ -18,9 +18,9 @@
 #endif
 
 #ifdef ASYNCSM
-  #if PERKS_ARCH<800 
-    #error "unsupport architecture"
-  #endif
+  // #if PERKS_ARCH<800 
+  //   #error "unsupport architecture" ${PERKS_ARCH}
+  // #endif
   #include <cooperative_groups/memcpy_async.h>
   #include <cuda_pipeline.h>
 #endif
@@ -199,17 +199,15 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
                     , sizeof(REAL));
         }
       }
+      __pipeline_commit();
     #endif
   }
   if(sync==true)
   {  
     #ifdef ASYNCSM
-
-      __pipeline_commit();
       __pipeline_wait_prior(0);
-    #else
-      __syncthreads();
     #endif
+    __syncthreads();
   }
   
   #undef dst_ind
