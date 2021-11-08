@@ -58,34 +58,40 @@ def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,bo
 
     return sub.stdout.read()
 
+import sys
 
 
-
-def singletask(halostring,realstring,useSM,box,archstring,asyncSM):
+def singletask(filename,halostring,realstring,useSM,box,archstring,asyncSM):
     regfolder=0
+    file = open(filename, 'a')
+    original_out=sys.stdout
     while (True):
     # for regfolder in range(3):
         subprocess_return = compile(archstring,halostring,regfolder,realstring,useSM,asyncSM,box)
-        # print(subprocess_return)
+        print(subprocess_return)
         returnlist =parseptx(subprocess_return.splitlines(), "general")
         spillnum=int(returnlist[6])+int(returnlist[7])
+        # file.write("kernel_general",halostring,returnlist[0],returnlist[1],returnlist[2],returnlist[3],returnlist[4],returnlist[5],returnlist[6],returnlist[7])
+        sys.stdout = file 
         print("kernel_general",halostring,returnlist[0],returnlist[1],returnlist[2],returnlist[3],returnlist[4],returnlist[5],returnlist[6],returnlist[7])
+        sys.stdout = original_out
+
         regfolder+=1
         # break
         if spillnum!=0:
             break
 
-def HuseSM(halostring,realstring,box,archstring,asyncSM):
-        singletask(halostring,realstring,"",box,archstring,asyncSM)
-        singletask(halostring,realstring,",USESM",box,archstring,asyncSM)
+def HuseSM(filename,halostring,realstring,box,archstring,asyncSM):
+        singletask(filename,halostring,realstring,"",box,archstring,asyncSM)
+        singletask(filename,halostring,realstring,",USESM",box,archstring,asyncSM)
 
-def HuseSMreal(halostring,box,archstring,asyncSM):
-    HuseSM(halostring,"float",box,archstring,asyncSM)
-    HuseSM(halostring,"double",box,archstring,asyncSM)
+def HuseSMreal(filename,halostring,box,archstring,asyncSM):
+    HuseSM(filename,halostring,"float",box,archstring,asyncSM)
+    HuseSM(filename,halostring,"double",box,archstring,asyncSM)
 
-def Hrange(halostart,haloend,box,archstring,asyncSM):
-    for i in range(halostart,haloend):
-        HuseSMreal(i,box,archstring,asyncSM)
+def Hrange(filename,halostart,haloend,box,archstring,asyncSM):
+    for i in range(halostart,haloend+1):
+        HuseSMreal(filename,i,box,archstring,asyncSM)
 
 def HuseSMrealbox(halostring,archstring,asyncSM):
     HuseSMreal(halostring,"",archstring,asyncSM)
@@ -109,16 +115,11 @@ halostring=1
 # box=""
 # HuseSMrealboxArch(1)
 # print("star")
-# print("80 sync")
-# Hrange(1,6,"","arch=compute_80,code=sm_80","")
-# print("80 async")
-# Hrange(1,6,"","arch=compute_80,code=sm_80",",ASYNCSM")
-# print("70")
-# Hrange(1,6,"","arch=compute_70,code=sm_70","")
-print("box")
-print("80 sync")
-# Hrange(1,2,"","arch=compute_80,code=sm_80","")
-print("80 async")
-Hrange(1,2,"","arch=compute_80,code=sm_80",",ASYNCSM")
-print("70")
-# Hrange(1,2,"","arch=compute_70,code=sm_70","")
+
+Hrange("star_80.log",1,6,"","arch=compute_80,code=sm_80","")
+Hrange("star_80_async.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM")
+Hrange("star_70.log",1,6,"","arch=compute_70,code=sm_70","")
+
+Hrange("box_80.log",1,2,",BOX","arch=compute_80,code=sm_80","")
+Hrange("box_80_async.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM")
+Hrange("box_70.log",1,2,",BOX","arch=compute_70,code=sm_70","")
