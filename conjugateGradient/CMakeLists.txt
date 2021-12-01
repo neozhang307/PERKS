@@ -7,6 +7,7 @@ include_directories(${CMAKE_SOURCE_DIR}/util)
 include_directories(${CMAKE_SOURCE_DIR}/cub)
 include_directories(${CMAKE_SOURCE_DIR})
 project(${projectname} CUDA CXX)
+set (CMAKE_CXX_STANDARD 14)
 
 # set(DEFAULT_COMPILER_FLAG "--std=c++14 -Xptxas \"-v -dlcm=cg\"")
 set(DEFAULT_COMPILER_FLAG "--std=c++14 -Xptxas \"-v -dlcm=cg\"")

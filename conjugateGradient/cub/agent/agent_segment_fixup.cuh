@@ -344,10 +344,11 @@ struct AgentSegmentFixup
     __device__ __forceinline__ void ConsumeRange(
         OffsetT             num_items,          ///< Total number of input items
         int                 num_tiles,          ///< Total number of input tiles
-        ScanTileStateT&     tile_state)         ///< Global tile state descriptor
+        ScanTileStateT&     tile_state,         ///< Global tile state descriptor
+        int                 g_tile_idx=-1)
     {
         // Blocks are launched in increasing order, so just assign one tile per block
-        int     tile_idx        = (blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
+        int     tile_idx        = g_tile_idx!=-1?g_tile_idx:(blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
         OffsetT tile_offset     = tile_idx * TILE_ITEMS;                    // Global offset for the current tile
         OffsetT num_remaining   = num_items - tile_offset;                  // Remaining items (including this tile)
 

@@ -598,9 +598,10 @@ struct AgentSpmv
     __device__ __forceinline__ void ConsumeTile(
         CoordinateT*    d_tile_coordinates,     ///< [in] Pointer to the temporary array of tile starting coordinates
         KeyValuePairT*  d_tile_carry_pairs,     ///< [out] Pointer to the temporary array carry-out dot product row-ids, one per block
-        int             num_merge_tiles)        ///< [in] Number of merge tiles
+        int             num_merge_tiles,        ///< [in] Number of merge tiles
+        int             g_tile_idx=-1)
     {
-        int tile_idx = (blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
+        int tile_idx = g_tile_idx!=-1?g_tile_idx:(blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
 
         if (tile_idx >= num_merge_tiles)
             return;
@@ -655,9 +656,338 @@ struct AgentSpmv
         }
     }
 
+/**********************************************************************/
+        //NEO: modification for PERKS
+    __device__ __forceinline__ KeyValuePairT ConsumeTilePERKS(
+            int             tile_idx,
+            CoordinateT     tile_start_coord,
+            CoordinateT     tile_end_coord,
+            Int2Type<false> is_direct_load)     ///< Marker type indicating whether to load nonzeros directly during path-discovery or beforehand in batch
+    {
+        int         tile_num_rows           = tile_end_coord.x - tile_start_coord.x;
+        int         tile_num_nonzeros       = tile_end_coord.y - tile_start_coord.y;
 
+
+        OffsetT*    s_tile_row_end_offsets  = &temp_storage.aliasable.merge_items[0].row_end_offset;
+        ValueT*     s_tile_nonzeros         = &temp_storage.aliasable.merge_items[tile_num_rows + ITEMS_PER_THREAD].nonzero;
+
+        #pragma unroll 1
+        for (int item = threadIdx.x; item <= tile_num_rows; item += BLOCK_THREADS)
+        {
+            s_tile_row_end_offsets[item] = wd_row_end_offsets[tile_start_coord.x + item];
+        }
+
+        CTA_SYNC();
+
+        ValueT vecs[ITEMS_PER_THREAD];
+        // ValueT vals[ITEMS_PER_THREAD];
+        // Gather the nonzeros for the merge tile into shared memory
+        // LINGQI: make this a prefetch format could improve performance. 
+        #pragma unroll
+        for (int ITEM = 0; ITEM < ITEMS_PER_THREAD; ++ITEM)
+        {
+            int nonzero_idx = threadIdx.x + (ITEM * BLOCK_THREADS);
+
+            ValueIteratorT a                = wd_values + tile_start_coord.y + nonzero_idx;
+            ColumnIndicesIteratorT ci       = wd_column_indices + tile_start_coord.y + nonzero_idx;
+            ValueT* s                       = s_tile_nonzeros + nonzero_idx;
+
+            if (nonzero_idx < tile_num_nonzeros)
+            {
+
+                OffsetT column_idx              = *ci;
+                ValueT  value                   = *a;
+                // vals[ITEM]                      = *a;
+                // ValueT  vector_value           ;// = spmv_params.t_vector_x[column_idx];
+                // vector_value                    = wd_vector_x[column_idx];
+                vecs[ITEM]                      = wd_vector_x[column_idx];
+
+                // ValueT  nonzero                 = value * vector_value;
+                ValueT  nonzero                 = value ;//* vector_value;
+
+                *s    = nonzero;
+            }
+        }
+
+        // Gather the row end-offsets for the merge tile into shared memory
+
+
+        // Search for the thread's starting coordinate within the merge tile
+        CountingInputIterator<OffsetT>  tile_nonzero_indices(tile_start_coord.y);
+        CoordinateT                     thread_start_coord;
+
+        MergePathSearch(
+            OffsetT(threadIdx.x * ITEMS_PER_THREAD),    // Diagonal
+            s_tile_row_end_offsets,                     // List A
+            tile_nonzero_indices,                       // List B
+            tile_num_rows,
+            tile_num_nonzeros,
+            thread_start_coord);
+
+        #pragma unroll
+        for (int ITEM = 0; ITEM < ITEMS_PER_THREAD; ++ITEM)
+        {
+            int nonzero_idx = threadIdx.x + (ITEM * BLOCK_THREADS);
+
+            // ValueIteratorT a                = wd_values + tile_start_coord.y + nonzero_idx;
+            // ColumnIndicesIteratorT ci       = wd_column_indices + tile_start_coord.y + nonzero_idx;
+            ValueT* s                       = s_tile_nonzeros + nonzero_idx;
+
+            if (nonzero_idx < tile_num_nonzeros)
+            {
+
+                // OffsetT column_idx              = *ci;
+                // ValueT  value                   = *a;
+                // vals[ITEM]                      = *a;
+                // ValueT  vector_value           ;// = spmv_params.t_vector_x[column_idx];
+                // vector_value                    = wd_vector_x[column_idx];
+                // vecs[ITEM]=wd_vector_x[column_idx];
+
+                // ValueT  nonzero                 = value * vector_value;
+                // ValueT  nonzero                 = value ;//* vector_value;
+
+                *s    = *s*vecs[ITEM];
+            }
+        }
+
+        CTA_SYNC();            // Perf-sync
+
+        // Compute the thread's merge path segment
+        CoordinateT     thread_current_coord = thread_start_coord;
+        KeyValuePairT   scan_segment[ITEMS_PER_THREAD];
+        ValueT          running_total = 0.0;
+
+        OffsetT row_end_offset  = s_tile_row_end_offsets[thread_current_coord.x];
+        ValueT  nonzero         = s_tile_nonzeros[thread_current_coord.y];
+
+        #pragma unroll
+        for (int ITEM = 0; ITEM < ITEMS_PER_THREAD; ++ITEM)
+        {
+            if (tile_nonzero_indices[thread_current_coord.y] < row_end_offset)
+            {
+                // Move down (accumulate)
+                scan_segment[ITEM].value    = nonzero;
+                running_total               += nonzero;
+                ++thread_current_coord.y;
+                nonzero                     = s_tile_nonzeros[thread_current_coord.y];
+            }
+            else
+            {
+                // Move right (reset)
+                scan_segment[ITEM].value    = 0.0;
+                running_total               = 0.0;
+                ++thread_current_coord.x;
+                row_end_offset              = s_tile_row_end_offsets[thread_current_coord.x];
+            }
+
+            scan_segment[ITEM].key = thread_current_coord.x;
+        }
+
+        // CTA_SYNC();
+
+        // Block-wide reduce-value-by-segment
+        KeyValuePairT       tile_carry;
+        ReduceBySegmentOpT  scan_op;
+        KeyValuePairT       scan_item;
+
+        scan_item.value = running_total;
+        scan_item.key = thread_current_coord.x;
+
+        BlockScanT(temp_storage.aliasable.scan).ExclusiveScan(scan_item, scan_item, scan_op, tile_carry);
+
+        if (threadIdx.x == 0)
+        {
+            scan_item.key = thread_start_coord.x;
+            scan_item.value = 0.0;
+        }
+
+        if (tile_num_rows > 0)
+        {
+
+            CTA_SYNC();
+
+            // Scan downsweep and scatter
+            ValueT* s_partials = &temp_storage.aliasable.merge_items[0].nonzero;
+
+            if (scan_item.key != scan_segment[0].key)
+            {
+                s_partials[scan_item.key] = scan_item.value;
+            }
+            else
+            {
+                scan_segment[0].value += scan_item.value;
+            }
+
+            #pragma unroll
+            for (int ITEM = 1; ITEM < ITEMS_PER_THREAD; ++ITEM)
+            {
+                if (scan_segment[ITEM - 1].key != scan_segment[ITEM].key)
+                {
+                    s_partials[scan_segment[ITEM - 1].key] = scan_segment[ITEM - 1].value;
+                }
+                else
+                {
+                    scan_segment[ITEM].value += scan_segment[ITEM - 1].value;
+                }
+            }
+
+            CTA_SYNC();
+
+            #pragma unroll 1
+            for (int item = threadIdx.x; item < tile_num_rows; item += BLOCK_THREADS)
+            {
+                spmv_params.d_vector_y[tile_start_coord.x + item] = s_partials[item];
+            }
+        }
+
+        // Return the tile's running carry-out
+        return tile_carry;
+    }
+
+
+
+        /**
+     * Consume input tile
+     */
+    //  template<bool toSM=false, bool isLoaded=false>
+    __device__ __forceinline__ void ConsumeTilePERKS(
+        CoordinateT*    d_tile_coordinates,     ///< [in] Pointer to the temporary array of tile starting coordinates
+        KeyValuePairT*  d_tile_carry_pairs,     ///< [out] Pointer to the temporary array carry-out dot product row-ids, one per block
+        int             num_merge_tiles,        ///< [in] Number of merge tiles
+        int             g_tile_idx=-1//,
+        // int             sm_coooid=-1,
+        // CoordinateT*    sm_tile_coordinates=NULL
+    )
+    {
+        int tile_idx = g_tile_idx!=-1?g_tile_idx:(blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
+
+        if (tile_idx >= num_merge_tiles)
+            return;
+
+        // Read our starting coordinates
+        if (threadIdx.x < 2)
+        {
+            if (d_tile_coordinates == NULL)
+            {
+                // Search our starting coordinates
+                OffsetT                         diagonal = (tile_idx + threadIdx.x) * TILE_ITEMS;
+                CoordinateT                     tile_coord;
+                CountingInputIterator<OffsetT>  nonzero_indices(0);
+
+                // Search the merge path
+                MergePathSearch(
+                    diagonal,
+                    RowOffsetsSearchIteratorT(spmv_params.d_row_end_offsets),
+                    nonzero_indices,
+                    spmv_params.num_rows,
+                    spmv_params.num_nonzeros,
+                    tile_coord);
+
+                temp_storage.tile_coords[threadIdx.x] = tile_coord;
+            }
+            else
+            {
+                temp_storage.tile_coords[threadIdx.x] = d_tile_coordinates[tile_idx + threadIdx.x];
+            }
+        }
+
+        CTA_SYNC();
+
+        CoordinateT tile_start_coord     = temp_storage.tile_coords[0];
+        CoordinateT tile_end_coord       = temp_storage.tile_coords[1];
+
+        // Consume multi-segment tile
+        KeyValuePairT tile_carry = ConsumeTilePERKS(
+            tile_idx,
+            tile_start_coord,
+            tile_end_coord,
+            Int2Type<AgentSpmvPolicyT::DIRECT_LOAD_NONZEROS>());
+
+        // Output the tile's carry-out
+        if (threadIdx.x == 0)
+        {
+            if (HAS_ALPHA)
+                tile_carry.value *= spmv_params.alpha;
+
+            tile_carry.key += tile_start_coord.x;
+            d_tile_carry_pairs[tile_idx]    = tile_carry;
+        }
+    }
+
+
+     template<bool isLoaded=false>
+    __device__ __forceinline__ void ConsumeTilePERKS(
+        CoordinateT*    d_tile_coordinates,     ///< [in] Pointer to the temporary array of tile starting coordinates
+        CoordinateT*    sm_tile_coordinates,    // shared memory
+        KeyValuePairT*  d_tile_carry_pairs,     ///< [out] Pointer to the temporary array carry-out dot product row-ids, one per block
+        int             num_merge_tiles,        ///< [in] Number of merge tiles
+        int             sm_cooid,
+        int             g_tile_idx=-1
+        // int             sm_coooid=-1,
+        // CoordinateT*    sm_tile_coordinates=NULL
+    )
+    {
+        int tile_idx = g_tile_idx!=-1?g_tile_idx:(blockIdx.x * gridDim.y) + blockIdx.y;    // Current tile index
+
+        if (tile_idx >= num_merge_tiles)
+            return;
+
+        // Read our starting coordinates
+        if(!isLoaded)
+        {
+            if (threadIdx.x < 2)
+            {
+                if (d_tile_coordinates == NULL)
+                {
+                    // Search our starting coordinates
+                    OffsetT                         diagonal = (tile_idx + threadIdx.x) * TILE_ITEMS;
+                    CoordinateT                     tile_coord;
+                    CountingInputIterator<OffsetT>  nonzero_indices(0);
+
+                    // Search the merge path
+                    MergePathSearch(
+                        diagonal,
+                        RowOffsetsSearchIteratorT(spmv_params.d_row_end_offsets),
+                        nonzero_indices,
+                        spmv_params.num_rows,
+                        spmv_params.num_nonzeros,
+                        tile_coord);
+
+                    // temp_storage.tile_coords[threadIdx.x] = tile_coord;
+                    sm_tile_coordinates[sm_cooid*2+threadIdx.x] = tile_coord;
+
+                }
+                else
+                {
+                    // temp_storage.tile_coords[threadIdx.x] = d_tile_coordinates[tile_idx + threadIdx.x];
+                    sm_tile_coordinates[sm_cooid*2+threadIdx.x] = d_tile_coordinates[tile_idx + threadIdx.x];//tile_coord;
+                }
+            }
+        }
+
+        CTA_SYNC();
+
+        CoordinateT tile_start_coord     = sm_tile_coordinates[sm_cooid*2+0];//temp_storage.tile_coords[0];
+        CoordinateT tile_end_coord       = sm_tile_coordinates[sm_cooid*2+1]; //temp_storage.tile_coords[1];
+
+        // Consume multi-segment tile
+        KeyValuePairT tile_carry = ConsumeTilePERKS(
+            tile_idx,
+            tile_start_coord,
+            tile_end_coord,
+            Int2Type<AgentSpmvPolicyT::DIRECT_LOAD_NONZEROS>());
+
+        // Output the tile's carry-out
+        if (threadIdx.x == 0)
+        {
+            if (HAS_ALPHA)
+                tile_carry.value *= spmv_params.alpha;
+
+            tile_carry.key += tile_start_coord.x;
+            d_tile_carry_pairs[tile_idx]    = tile_carry;
+        }
+    }
 };
-
 
 
 
