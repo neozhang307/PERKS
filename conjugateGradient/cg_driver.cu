@@ -238,10 +238,8 @@ void myTest(
   // mycsrMatrix.values=val;
 
   // // Get amount of temporary storage needed
-    // for(int i=0; i<N; i++)y[i]=0;
-    // // gpu
     CubDebugExit(
-        (DispatchCG<ValueT,OffsetT>::Dispatch(
+        (DispatchCG<ValueT,OffsetT>::InitDispatch(
             d_temp_storage,
             temp_storage_bytes,
             params,
@@ -281,24 +279,7 @@ void myTest(
   cudaMemcpy(&total_iter, cgParamsT.d_iter, sizeof(unsigned int), cudaMemcpyDeviceToHost);
   printf("GPU Final, residual = %e, kernel execution time = %f ms in %d iteration\n", sqrt(r1),
          time,total_iter);
-#ifdef BASELINE
-  #ifdef NOCOO
-    fprintf(stderr,"NOCOO");
-  #endif
-  fprintf(stderr,"BASELINE\t");
-#elif defined(COO)
-  fprintf(stderr,"COO\t");
-#elif defined(VAL)
-  fprintf(stderr,"VAL\t");
-#elif defined(COL)
-  fprintf(stderr,"COL\t");  
-#elif defined(VEC)
-  fprintf(stderr,"VEC\t");
-#elif defined(VECR)
-  fprintf(stderr,"VECR\t");
-#elif defined(VECX)
-  fprintf(stderr,"VECX\t");
-#endif
+
   fprintf(stderr,"%s\t"
     "%e\t"
     "%d\t%d\t%d\t"
