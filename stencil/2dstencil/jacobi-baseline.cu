@@ -57,8 +57,8 @@ kernel_baseline_box
   extern __shared__ char sm[];
   
   REAL* sm_space = (REAL*)sm+1;
-//  REAL* sm_rbuffer = sm_space;
-  __shared__ REAL sm_rbuffer[(RTILE_Y+2*HALO)*(TILE_X+2*HALO)+1];
+  REAL* sm_rbuffer = sm_space;
+  // __shared__ REAL sm_rbuffer[(RTILE_Y+2*HALO)*(TILE_X+2*HALO)+1];
 #ifndef BOX
   register REAL r_smbuffer[2*halo+LOCAL_TILE_Y];
 #else
