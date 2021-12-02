@@ -64,10 +64,11 @@ int main(int argc, char const *argv[])
   jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
   jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
 #else
+#ifdef CHECK
   jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
-#ifndef __PRINT__
-  jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
 #endif
+  jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+
 #endif
 
 #ifdef REFCHECK
@@ -76,7 +77,7 @@ int main(int argc, char const *argv[])
   int halo=HALO*iteration;
   // int halo=0;
 #endif
-#ifndef __PRINT__
+#ifdef CHECK
   REAL error =
     checkError2D<REAL>
     (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
