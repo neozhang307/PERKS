@@ -65,7 +65,9 @@ int main(int argc, char const *argv[])
   jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
 #else
   jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+#ifndef __PRINT__
   jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+#endif
 #endif
 
 #ifdef REFCHECK
@@ -74,12 +76,15 @@ int main(int argc, char const *argv[])
   int halo=HALO*iteration;
   // int halo=0;
 #endif
+#ifndef __PRINT__
   REAL error =
     checkError2D<REAL>
     (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
   printf("[Test] RMS Error : %e\n",error);
   if (error > TOLERANCE)
     return -1;
+// printf("asdfasdfdd");
+#endif
   delete[] input;
   delete[] output;
   delete[] output_gold;

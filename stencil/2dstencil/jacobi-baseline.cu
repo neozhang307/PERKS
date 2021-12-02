@@ -1,4 +1,6 @@
-#include "./config.cuh"
+#ifndef CONFIGURE
+  #include "./config.cuh"
+#endif
 #include "./common/cuda_computation.cuh"
 #include "./common/cuda_common.cuh"
 #include "./common/types.hpp"
@@ -55,8 +57,8 @@ kernel_baseline_box
   extern __shared__ char sm[];
   
   REAL* sm_space = (REAL*)sm+1;
-  REAL* sm_rbuffer = sm_space;
-
+//  REAL* sm_rbuffer = sm_space;
+  __shared__ REAL sm_rbuffer[(RTILE_Y+2*HALO)*(TILE_X+2*HALO)+1];
 #ifndef BOX
   register REAL r_smbuffer[2*halo+LOCAL_TILE_Y];
 #else
@@ -151,19 +153,35 @@ kernel_baseline_box
   #undef REG2REG
   #undef isBOX
 } 
-// #endif
-#ifndef BOX
-    #ifndef PERSISTENT
-        PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,RTILE_Y,HALO);
-    #else
-        PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE,RTILE_Y,HALO);
-    #endif
+// #endiif
+#ifndef CONFIGURE
+  #ifndef BOX
+      #ifndef PERSISTENT
+          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,RTILE_Y,HALO);
+      #else
+          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE,RTILE_Y,HALO);
+      #endif
+  #else
+      #ifndef PERSISTENT
+          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_BOX,RTILE_Y,HALO);
+      #else
+          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX,RTILE_Y,HALO);
+      #endif
+  #endif
 #else
-    #ifndef PERSISTENT
-        PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_BOX,RTILE_Y,HALO);
-    #else
-        PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX,RTILE_Y,HALO);
-    #endif
+  #ifndef BOX
+      #ifdef PERSISTENT
+          template __global__ void kernel_persistent_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #else
+          template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #endif
+  #else
+      #ifdef PERSISTENT
+          template __global__ void kernel_persistent_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #else
+          template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #endif
+  #endif
 #endif
 // template __global__ void kernel_baseline<float, RTILE_Y,HALO>(float*,int,int,float*);
 // template void kernel_baseline<double, HALO>(double*,int,int,double*);
