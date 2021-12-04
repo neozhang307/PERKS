@@ -2,8 +2,11 @@
 #include <helper_cuda.h>  // helper function CUDA error checking and initialization
 #include <helper_functions.h>  // helper for shared functions common to CUDA Samples
 
-#include <cub_utils.cuh>
+#include "util/cub_utils.cuh"
+// #include <cub_utils.cuh>
 #include "cg_driver.cuh"
+
+// #include "util/command.cuh"
 
 int main(int argc, char **argv) {
   CommandLineArgs args(argc, argv);

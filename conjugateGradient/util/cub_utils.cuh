@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 
+#pragma once
 
 namespace mersenne {
 
@@ -136,3 +137,5 @@ bool areAlmostEqual(TYPE a, TYPE b, TYPE maxRelDiff) ;
 #endif // __NVCC__
 
 };
+
+

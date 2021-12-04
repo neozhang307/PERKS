@@ -233,6 +233,7 @@ unsigned int genrand_int32(void)
     }
 
 
+    template void CommandLineArgs::GetCmdLineArgument<std::string>(const char *arg_name, std::string &val);
     /**
      * Returns the values specified for a given commandline parameter --<flag>=<value>,<value>*
      */
@@ -280,6 +281,7 @@ unsigned int genrand_int32(void)
         }
     }
 
+    // template void CommandLineArgs::GetCmdLineArgument<char>(const char *arg_name, std::vector<char> &val);
 
     /**
      * The number of pairs parsed

@@ -441,7 +441,7 @@ __global__ void gpuConjugateGradient_cub
     // auto spmv_kernel=DvFuncSpmvKernelSM2<SpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, true, false>;
     auto segment_fixup_kernel=DvFuncSegmentFixupKernel<AgentSegmentFixupPolicyT, KeyValuePair<OffsetT,ValueT>*, ValueT*, OffsetT, ScanTileStateT>;
 
-    unsigned int max_iter = 1000;//maxiter;//N;//MAXITER;
+    unsigned int max_iter = maxiter;//N;//MAXITER;
 
     ValueT alpha = 1.0;
     ValueT alpham1 = -1.0;
@@ -458,7 +458,7 @@ __global__ void gpuConjugateGradient_cub
                 false>
             AgentSpmvT;
     __shared__ typename AgentSpmvT::TempStorage temp_storage;
-    typename AgentSpmvT::TempStorage temp_storage3=((typename AgentSpmvT::TempStorage*)tmp)[1];
+    // typename AgentSpmvT::TempStorage temp_storage3=((typename AgentSpmvT::TempStorage*)tmp)[1];
     typedef AgentSegmentFixup<
                 AgentSegmentFixupPolicyT,
                 KeyValuePair<OffsetT,ValueT>*,
@@ -470,20 +470,14 @@ __global__ void gpuConjugateGradient_cub
 
         // Shared memory for AgentSegmentFixup
     __shared__ typename AgentSegmentFixupT::TempStorage temp_storage2;
-    // typename AgentSegmentFixupT::TempStorage temp_storage2=((typename AgentSegmentFixupT::TempStorage*)tmp)[0];
-    // {
-    //     int sm_id=0;
-    //     for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-    //     {
-    //         AgentSpmvT(temp_storage, spmv_params).ConsumeTileLoadTBCoord(
-    //             tile_idx,
-    //             d_tile_coordinates,
-    //             sm_tile_coordinates,
-    //             d_tile_carry_pairs,
-    //             num_merge_tiles,
-    //             sm_id++);
-    //     }
-    // } 
+
+    //LINGQI:
+    /*
+        I tried to merge all temp space (doable). 
+        Yet the AgentSpmv::TempStorage would run into bugs. 
+        Not sure the reason
+        Might be some 
+    */
 
     {
         int sm_id=0;
@@ -521,7 +515,7 @@ __global__ void gpuConjugateGradient_cub
 
     //                 d_tile_carry_pairs,
     //                 num_merge_tiles,
-    //                 sm_id);
+    //            );
     //     }
     //     // Initialize fixup tile status
     //     tile_state.InitializeStatus(num_segment_fixup_tiles);
@@ -555,8 +549,8 @@ __global__ void gpuConjugateGradient_cub
     r1 = *dot_result;
 
     int k = 1;
-    // while (r1 > tol * tol && k <= max_iter) {
-    while (k <= max_iter) {
+    while (r1 > tol * tol && k <= max_iter) {
+    // while (k <= max_iter) {
         if (k > 1) {
             b = r1 / r0;
             //v(r)+p(p)->v(p)
@@ -615,13 +609,6 @@ __global__ void gpuConjugateGradient_cub
     cg::sync(grid);
     if (num_merge_tiles > 1)
     {
-        // segment_fixup_kernel(
-        //   d_tile_carry_pairs,
-        //   // spmv_params.d_vector_y,
-        //   (Ax),
-        //   num_merge_tiles,
-        //   num_segment_fixup_tiles,
-        //   tile_state);
         for(int tile_idx=blockIdx.x; tile_idx<num_segment_fixup_tiles; tile_idx+=gridDim.x)
         {
             // Process tiles

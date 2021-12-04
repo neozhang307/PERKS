@@ -25,6 +25,9 @@
 #include "util/timer.cuh"
 #include "util/cub_utils.cuh"
 
+// #include "util/command.cuh"
+// #include <cub_utils.cuh>
+
 #include "cg_dispatcher.cuh"
 
 #include <helper_cuda.h>  // helper function CUDA error checking and initialization
@@ -38,12 +41,12 @@ using namespace cub;
 
 
 
-// bool                    g_quiet     = false;        // Whether to display stats in CSV format
+bool                    g_quiet     = false;        // Whether to display stats in CSV format
 // bool                    g_verbose   = false;        // Whether to display output to console
 // bool                    g_verbose2  = false;        // Whether to display input to console
 CachingDeviceAllocator  g_allocator(true);          // Caching allocator for device memory
 
-
+#undef USEVDATA
 #include "tridiag.h"
 #include "cg_driver.cuh"
 
@@ -105,6 +108,8 @@ void myTest(
       mtx_filename="/home/Lingqi/workspace/merge_spmv/perk_cg/data/bmwcra_1/bmwcra_1.mtx";
       // mtx_filename="/home/Lingqi/data/general/fv1/fv1.mtx";
   }
+  // printf("opening %s\n",mtx_filename.get_ptr());
+  // cout<<"opening "<<mtx_filename;
   int                 max_iter   = -1;
   args.GetCmdLineArgument("iters", max_iter);
 
