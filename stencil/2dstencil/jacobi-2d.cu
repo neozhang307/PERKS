@@ -264,18 +264,18 @@ size_t executeSM = 0;
 #endif
 
 #if defined(GEN) && defined(L2PER)
-    REAL l2perused;
-    size_t inner_window_size = 30*1024*1024;
-    cudaStreamAttrValue stream_attribute;
-    stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(L2_cache3);                  // Global Memory data pointer
-    stream_attribute.accessPolicyWindow.num_bytes = min(inner_window_size,L2_utage_2*2);                                   // Number of bytes for persistence access
-    stream_attribute.accessPolicyWindow.hitRatio  = 1;                                             // Hint for cache hit ratio
-    stream_attribute.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting;                  // Persistence Property
-    stream_attribute.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;  
+    // REAL l2perused;
+    // size_t inner_window_size = 30*1024*1024;
+    // cudaStreamAttrValue stream_attribute;
+    // stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(L2_cache3);                  // Global Memory data pointer
+    // stream_attribute.accessPolicyWindow.num_bytes = min(inner_window_size,L2_utage_2*2);                                   // Number of bytes for persistence access
+    // stream_attribute.accessPolicyWindow.hitRatio  = 1;                                             // Hint for cache hit ratio
+    // stream_attribute.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting;                  // Persistence Property
+    // stream_attribute.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;  
 
-    cudaStreamSetAttribute(0, cudaStreamAttributeAccessPolicyWindow, &stream_attribute); 
-    cudaCtxResetPersistingL2Cache();
-    cudaStreamSynchronize(0);
+    // cudaStreamSetAttribute(0, cudaStreamAttributeAccessPolicyWindow, &stream_attribute); 
+    // cudaCtxResetPersistingL2Cache();
+    // cudaStreamSynchronize(0);
 #endif
 
 #ifdef WARMUPRUN
@@ -403,18 +403,18 @@ size_t executeSM = 0;
   float elapsedTime;
   cudaEventElapsedTime(&elapsedTime,_forma_timer_start_,_forma_timer_stop_);
   #ifdef __PRINT__
-  printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
+    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
   #else
-  printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
-  printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
-  printf("[FORMA] Speed(GFLOPS/s) : %lf\n", (REAL)17*iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
-  printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000);
-  printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
-  printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
-#if defined(GEN) || defined(MIX)
-  printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
-  printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
-#endif
+    printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
+    printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
+    printf("[FORMA] Speed(GFLOPS/s) : %lf\n", (REAL)17*iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
+    printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000);
+    printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
+    printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
+    #if defined(GEN) || defined(MIX)
+      printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
+      printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
+    #endif
   #endif
 
   cudaEventDestroy(_forma_timer_start_);
