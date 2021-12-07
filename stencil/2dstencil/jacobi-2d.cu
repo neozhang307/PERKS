@@ -51,13 +51,17 @@ namespace cg = cooperative_groups;
 }
 
 
-__global__ void printptx()
+__global__ void printptx(int *result)
 {
-  printf("code is run in %d\n",PERKS_ARCH);
+  // printf("code is run in %d\n",PERKS_ARCH);
+  result[0]=PERKS_ARCH;
 }
-void host_printptx()
+void host_printptx(int&result)
 {
-  printptx<<<1,1>>>();
+  int*d_r;
+  cudaMalloc((void**)&d_r, sizeof(int));
+  printptx<<<1,1>>>(d_r);
+  cudaMemcpy(&result, d_r, sizeof(int), cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 }
 
@@ -85,12 +89,17 @@ void host_printptx()
 
 
 template<class REAL>
+// void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
 void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
-  host_printptx();
+  int ptx;
+  host_printptx(ptx);
+  #ifndef __PRINT__
+    printf("code is run in %d\n",ptx);
+  #endif
 /*************************************/
-
+  // if(ptx<800&&async==true)printf("error async not support\n");//lower ptw not support 
 
 //initialization
 #if defined(PERSISTENT)
@@ -391,10 +400,11 @@ size_t executeSM = 0;
 #endif 
 
 #ifdef __PRINT__
+  printf("%d\t%d\t",ptx,sizeof(REAL)/4);
   printf("%d\t%d\t%d\t",width_x,width_y,iteration);
   printf("<%d,%d>\t<%d,%d>\t%d\t0\t0\t",executeBlockDim.x,1,
         executeGridDim.x,executeGridDim.y,
-        executeGridDim.x*executeGridDim.y/sm_count);
+        (executeGridDim.x)*(executeGridDim.y)/sm_count);
 #endif
 
 #ifdef _TIMER_
@@ -403,7 +413,7 @@ size_t executeSM = 0;
   float elapsedTime;
   cudaEventElapsedTime(&elapsedTime,_forma_timer_start_,_forma_timer_stop_);
   #ifdef __PRINT__
-    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
+    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*halo)*(width_x-2*halo)/ elapsedTime/1000/1000);
   #else
     printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
     printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);

@@ -33,10 +33,11 @@ int main(int argc, char const *argv[])
   int width_y;
   int iteration=3;
   width_x=width_y=4096;//4096;
+  int type=0;//float
+  int check=0;
+  bool async=false;
   // width_y=100;
-#ifdef REFCHECK
-  iteration=4;
-#else
+
   if (argc >= 3) {
     width_y = atoi(argv[1]);
     width_x = atoi(argv[2]);
@@ -44,53 +45,109 @@ int main(int argc, char const *argv[])
     if(argc>=4)
     {
       iteration=atoi(argv[3]);
+      if(argc>=5)
+      {
+        type=atoi(argv[4])!=0?1:0;
+        if(argc>=6)
+        {
+          // async=atoi(argv[4])!=0?true:false;
+          // if(argc>=7)
+          // {
+            check=atoi(argv[5])!=0?1:0;
+          // }
+        }
+      }
     }  
     else
     {
       iteration=3;
     }
   }
+#ifdef REFCHECK
+  iteration=4;
 #endif
+// #endif
 
-  #define REAL float
+  if(type==0)
+  {
+    #define REAL float
+    
+    REAL (*input)[width_x] = (REAL (*)[width_x])
+      getRandom2DArray<REAL>(width_y, width_x);
+    REAL (*output)[width_x] = (REAL (*)[width_x])
+      getZero2DArray<REAL>(width_y, width_x);
+    REAL (*output_gold)[width_x] = (REAL (*)[width_x])
+      getZero2DArray<REAL>(width_y, width_x);
+    #ifdef REFCHECK
+      jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
+      jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+    #else
+      if(check!=0)
+      {
+        jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+      }
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+    #endif
+
+    
+    if(check!=0){
+      int halo=HALO*iteration;
+      double error =
+        checkError2D<REAL>
+        (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
+      printf("[Test] RMS Error : %e\n",error);
+      if (error > TOLERANCE)
+        return -1;
+    }
+    #undef REAL
+    delete[] input;
+    delete[] output;
+    delete[] output_gold;
+  }
+  else
+  {
+    #define REAL double
   
-  REAL (*input)[width_x] = (REAL (*)[width_x])
-    getRandom2DArray<REAL>(width_y, width_x);
-  REAL (*output)[width_x] = (REAL (*)[width_x])
-    getZero2DArray<REAL>(width_y, width_x);
-  REAL (*output_gold)[width_x] = (REAL (*)[width_x])
-    getZero2DArray<REAL>(width_y, width_x);
-#ifdef REFCHECK
-  jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
-  jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
-#else
-#ifdef CHECK
-  jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
-#endif
-  jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+    REAL (*input)[width_x] = (REAL (*)[width_x])
+      getRandom2DArray<REAL>(width_y, width_x);
+    REAL (*output)[width_x] = (REAL (*)[width_x])
+      getZero2DArray<REAL>(width_y, width_x);
+    REAL (*output_gold)[width_x] = (REAL (*)[width_x])
+      getZero2DArray<REAL>(width_y, width_x);
+    #ifdef REFCHECK
+      jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
+      jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+    #else
+      if(check!=0)
+      {
+        jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
+      }
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
 
-#endif
+    #endif
 
-#ifdef REFCHECK
-  int halo=HALO*iteration;
-#else
-  int halo=HALO*iteration;
-  // int halo=0;
-#endif
-#ifdef CHECK
-  REAL error =
-    checkError2D<REAL>
-    (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
-  printf("[Test] RMS Error : %e\n",error);
-  if (error > TOLERANCE)
-    return -1;
-// printf("asdfasdfdd");
-#endif
-  delete[] input;
-  delete[] output;
-  delete[] output_gold;
+    #ifdef REFCHECK
+      int halo=HALO*iteration;
+    #else
+      int halo=HALO*iteration;
+      // int halo=0;
+    #endif
+    if(check!=0){
+      double error =
+        checkError2D<REAL>
+        (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
+      printf("[Test] RMS Error : %e\n",error);
+      if (error > TOLERANCE)
+        return -1;
+    }
+    #undef REAL
+    delete[] input;
+    delete[] output;
+    delete[] output_gold;
+  }
 
-  #undef REAL
+
+  // #undef REAL
   /* code */
   return 0;
 }
