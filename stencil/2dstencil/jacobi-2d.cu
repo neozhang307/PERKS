@@ -68,29 +68,29 @@ void host_printptx(int&result)
 #ifndef RTILE_Y
 #define RTILE_Y (8)
 #endif
-#ifndef TILE_X
-#define TILE_X (256)
-#endif
+// #ifndef bdimx
+// #define bdimx (256)
+// #endif
 
-#define bdim_x (TILE_X)
+// #define bdimx (bdimx)
 
-#define BASIC_TILE_X (TILE_X+2*HALO)
-#define BASIC_TILE_Y (RTILE_Y+2*HALO)
-#define BASIC_SM_SPACE (BASIC_TILE_X)*(BASIC_TILE_Y)
+// #define BASIC_bdimx (bdimx+2*HALO)
+// #define BASIC_TILE_Y (RTILE_Y+2*HALO)
+// #define BASIC_SM_SPACE (BASIC_bdimx)*(BASIC_TILE_Y)
 
 
-#define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
-#define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLDER_Y)
-#define TOTAL_SM_CACHE_SPACE (TILE_X+2*HALO)*(TOTAL_SM_TILE_Y+2*HALO)
+// #define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
+// #define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLDER_Y)
+// #define TOTAL_SM_CACHE_SPACE (bdimx+2*HALO)*(TOTAL_SM_TILE_Y+2*HALO)
 
-#define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
+// #define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
 
 
 
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
+void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int iteration, bool async){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
   int ptx;
@@ -99,7 +99,7 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
     printf("code is run in %d\n",ptx);
   #endif
 /*************************************/
-  // if(ptx<800&&async==true)printf("error async not support\n");//lower ptw not support 
+  if(ptx<800&&async==true)printf("error async not support\n");//lower ptw not support 
 
 //initialization
 #if defined(PERSISTENT)
@@ -150,12 +150,12 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #if defined(GEN) || defined(MIX)|| defined(PERSISTENT)
   REAL * L2_cache3;
   REAL * L2_cache4;
-  size_t L2_utage_2 = sizeof(REAL)*(width_y)*2*(width_x/bdim_x)*HALO;
+  size_t L2_utage_2 = sizeof(REAL)*(width_y)*2*(width_x/bdimx)*HALO;
 #ifndef __PRINT__
   printf("l2 cache used is %ld KB : 4096 KB \n",L2_utage_2*2/1024);
 #endif
   cudaMalloc(&L2_cache3,L2_utage_2*2);
-  L2_cache4=L2_cache3+(width_y)*2*(width_x/bdim_x)*HALO;
+  L2_cache4=L2_cache3+(width_y)*2*(width_x/bdimx)*HALO;
 #endif
 
   //initialize shared memory
@@ -171,7 +171,7 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 size_t executeSM = 0;
 #ifndef NAIVE
   //shared memory used for compuation
-  int basic_sm_space=(RTILE_Y+2*HALO)*(TILE_X+2*HALO);
+  int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO);
   size_t sharememory_basic=(1+basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
 
@@ -188,10 +188,10 @@ size_t executeSM = 0;
                           -2*HALO*isBOX
                           -basic_sm_space
                           -2*HALO*(REG_FOLDER_Y)*RTILE_Y
-                          -2*HALO*(TILE_X+2*HALO))/(TILE_X+4*HALO)/RTILE_Y;
+                          -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
 
   // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
-  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(TILE_X+2*HALO)*sizeof(REAL);
+  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
   size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
@@ -213,37 +213,37 @@ size_t executeSM = 0;
     {
       // cudaLaunchCooperativeKernel((void*)kernel_mix, grid_dim, block_dim, KernelArgs2,sharememory3,0);
       cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_mix, bdim_x, sharememory3);
+        &numBlocksPerSm_current, kernel_mix, bdimx, sharememory3);
     }
     else
     {
       // cudaLaunchCooperativeKernel((void*)kernel_mix_reg, grid_dim, block_dim, KernelArgs2,sharememory4,0);
       cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_mix_reg, bdim_x, sharememory4);
+        &numBlocksPerSm_current, kernel_mix_reg, bdimx, sharememory4);
     }
   
   #endif
   #if defined(BASELINE_CM)||defined(PERSISTENT)||defined(GEN)
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, execute_kernel, bdim_x, executeSM);
+        &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
   #endif
 
-  dim3 block_dim(bdim_x);
-  dim3 grid_dim(width_x/bdim_x,sm_count*numBlocksPerSm_current/(width_x/bdim_x));
+  dim3 block_dim(bdimx);
+  dim3 grid_dim(width_x/bdimx,sm_count*numBlocksPerSm_current/(width_x/bdimx));
   
   dim3 executeBlockDim=block_dim;
   dim3 executeGridDim=grid_dim;
 #endif 
 #ifdef NAIVE
-  dim3 block_dim_1(MIN(width_x,bdim_x),1);
-  dim3 grid_dim_1(width_x/MIN(width_x,bdim_x),width_y/1);
+  dim3 block_dim_1(MIN(width_x,bdimx),1);
+  dim3 grid_dim_1(width_x/MIN(width_x,bdimx),width_y/1);
 
   dim3 executeBlockDim=block_dim_1;
   dim3 executeGridDim=grid_dim_1;
 #endif
 #ifdef BASELINE
-  dim3 block_dim2(bdim_x);
-  dim3 grid_dim2(width_x/bdim_x,MIN((sm_count*8*1024/bdim_x)/(width_x/bdim_x),width_y/RTILE_Y));
+  dim3 block_dim2(bdimx);
+  dim3 grid_dim2(width_x/bdimx,MIN((sm_count*8*1024/bdimx)/(width_x/bdimx),width_y/RTILE_Y));
 //  printf("<%d,%d,%d>",); 
   dim3 executeBlockDim=block_dim2;
   dim3 executeGridDim=grid_dim2;
@@ -345,8 +345,8 @@ size_t executeSM = 0;
 #endif
 
 #ifndef __PRINT__  
-  printf("sm_count is %d\n",sm_count);
-  printf("MAX shared memory is %f KB but only use %f KB\n",maxSharedMemory/1024.0,SharedMemoryUsed/1024.0);
+  printf("sm_count is %d\n", sm_count);
+  printf("MAX shared memory is %f KB but only use %f KB\n", maxSharedMemory/1024.0,SharedMemoryUsed/1024.0);
   printf(" shared meomory size is %ld KB\n", executeSM/1024);
 
 #endif
@@ -400,7 +400,7 @@ size_t executeSM = 0;
 #endif 
 
 #ifdef __PRINT__
-  printf("%d\t%d\t",ptx,sizeof(REAL)/4);
+  printf("%d\t%d\t%d\t",ptx,sizeof(REAL)/4,(int)async);
   printf("%d\t%d\t%d\t",width_x,width_y,iteration);
   printf("<%d,%d>\t<%d,%d>\t%d\t0\t0\t",executeBlockDim.x,1,
         executeGridDim.x,executeGridDim.y,
@@ -413,7 +413,7 @@ size_t executeSM = 0;
   float elapsedTime;
   cudaEventElapsedTime(&elapsedTime,_forma_timer_start_,_forma_timer_stop_);
   #ifdef __PRINT__
-    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*halo)*(width_x-2*halo)/ elapsedTime/1000/1000);
+    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ elapsedTime/1000/1000);
   #else
     printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
     printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
@@ -422,7 +422,7 @@ size_t executeSM = 0;
     printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
     printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
     #if defined(GEN) || defined(MIX)
-      printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)TILE_X*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
+      printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)bdimx*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
       printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
     #endif
   #endif

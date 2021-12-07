@@ -149,12 +149,27 @@ template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void
 kernel_baseline_box (REAL* __restrict__ input, int width_y, int width_x, REAL* __restrict__ output);
 
+template<class REAL, int LOCAL_TILE_Y, int halo>
+__global__ void
+kernel_baseline_async (REAL*__restrict__ input, int width_y, int width_x, REAL*__restrict__ output);
+
+template<class REAL, int LOCAL_TILE_Y, int halo>
+__global__ void
+kernel_baseline_box_async (REAL* __restrict__ input, int width_y, int width_x, REAL* __restrict__ output);
+
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE(_type,tile,halo) \
     __global__ void kernel_baseline<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE_BOX(_type,tile,halo) \
     __global__ void kernel_baseline_box<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+
+#define PERKS_DECLARE_INITIONIZATION_BASELINE_ASYNC(_type,tile,halo) \
+    __global__ void kernel_baseline_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+
+#define PERKS_DECLARE_INITIONIZATION_BASELINE_BOX_ASYNC(_type,tile,halo) \
+    __global__ void kernel_baseline_box_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
@@ -167,12 +182,27 @@ __global__ void kernel_persistent_baseline_box( REAL * __restrict__ input, int w
   REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
   int iteration);
 
-  #define PERKS_DECLARE_INITIONIZATION_PBASELINE(_type,tile,halo) \
+template<class REAL, int LOCAL_TILE_Y, int halo>
+__global__ void kernel_persistent_baseline_async(REAL *__restrict__  input, int width_y, int width_x, 
+  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+  int iteration);
+
+  template<class REAL, int LOCAL_TILE_Y, int halo>
+__global__ void kernel_persistent_baseline_box_async( REAL * __restrict__ input, int width_y, int width_x, 
+  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+  int iteration);
+
+#define PERKS_DECLARE_INITIONIZATION_PBASELINE(_type,tile,halo) \
     __global__ void kernel_persistent_baseline<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
 
 #define PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX(_type,tile,halo) \
     __global__ void kernel_persistent_baseline_box<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
 
+#define PERKS_DECLARE_INITIONIZATION_PBASELINE_ASYNC(_type,tile,halo) \
+    __global__ void kernel_persistent_baseline_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
+
+#define PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX_ASYNC(_type,tile,halo) \
+    __global__ void kernel_persistent_baseline_box_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
 
 template<class REAL, int LOCAL_TILE_Y, int halo,int reg_folder_y, bool UseSMCache>
 __global__ void kernel_general(REAL *__restrict__  input, int width_y, int width_x, 

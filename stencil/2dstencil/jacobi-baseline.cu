@@ -8,26 +8,38 @@
 
 #include <cooperative_groups.h>
 
-#ifdef SMASYNC
-  #if PERKS_ARCH<800 
-    #error "unsupport architecture"
-  #endif
-  #include <cooperative_groups/memcpy_async.h>
-  #include <cuda_pipeline.h>
-#endif
+// #ifdef SMASYNC
+  // #if PERKS_ARCH<800 
+    // #error "unsupport architecture"
+  // #endif
+#include <cooperative_groups/memcpy_async.h>
+#include <cuda_pipeline.h>
+// #endif
 
 namespace cg = cooperative_groups;
 
-
+// #define SMASYNC
 // #if defined(BASELINE_CM)||defined(BASELINE)||defined(PERSISTENT)
-
+/*
+LINGQI:
+async and box both too complex to use template
+in asyn template function, performance decreased a lot
+*/
 template<class REAL, int LOCAL_TILE_Y, int halo>
 #ifdef PERSISTENT
 __global__ void 
 #ifndef BOX
-kernel_persistent_baseline
+  #ifdef SMASYNC
+    kernel_persistent_baseline_async
+  #else
+    kernel_persistent_baseline
+  #endif
 #else
-kernel_persistent_baseline_box
+  #ifdef SMASYNC
+    kernel_persistent_baseline_box_async
+  #else
+    kernel_persistent_baseline_box
+  #endif
 #endif
 (REAL * __restrict__ input, int width_y, int width_x, 
   REAL *__restrict__ __var_4__,REAL *__restrict__ l2_cache, REAL *__restrict__ l2_cachetmp, 
@@ -35,9 +47,17 @@ kernel_persistent_baseline_box
 #else
 __global__ void 
 #ifndef BOX
-kernel_baseline
+  #ifdef SMASYNC
+    kernel_baseline_async
+  #else
+    kernel_baseline
+  #endif
 #else
-kernel_baseline_box
+  #ifdef SMASYNC
+    kernel_baseline_box_async
+  #else
+    kernel_baseline_box
+  #endif
 #endif
 (REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__)
@@ -156,31 +176,63 @@ kernel_baseline_box
 // #endiif
 #ifndef CONFIGURE
   #ifndef BOX
-      #ifndef PERSISTENT
-          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,RTILE_Y,HALO);
-      #else
-          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE,RTILE_Y,HALO);
-      #endif
+      #ifdef SMASYNC
+        #ifndef PERSISTENT
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_ASYNC,RTILE_Y,HALO);
+        #else
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_ASYNC,RTILE_Y,HALO);
+        #endif
+      #else 
+        #ifndef PERSISTENT
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,RTILE_Y,HALO);
+        #else
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE,RTILE_Y,HALO);
+        #endif
+      #endif 
   #else
-      #ifndef PERSISTENT
-          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_BOX,RTILE_Y,HALO);
-      #else
-          PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX,RTILE_Y,HALO);
+      #ifdef SMASYNC
+        #ifndef PERSISTENT
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_BOX_ASYNC,RTILE_Y,HALO);
+        #else
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX_ASYNC,RTILE_Y,HALO);
+        #endif
+      #else 
+        #ifndef PERSISTENT
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_BASELINE_BOX,RTILE_Y,HALO);
+        #else
+            PERKS_INITIALIZE_ALL_TYPE_2ARG(PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX,RTILE_Y,HALO);
+        #endif
       #endif
   #endif
 #else
   #ifndef BOX
+    #ifdef SMASYNC
+      #ifdef PERSISTENT
+          template __global__ void kernel_persistent_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #else
+          template __global__ void kernel_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #endif
+    #else
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
           template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #endif
+    #endif
   #else
+    #ifdef SMASYNC
+      #ifdef PERSISTENT
+          template __global__ void kernel_persistent_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #else
+          template __global__ void kernel_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+      #endif
+    #else 
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
           template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
-      #endif
+      #endif    
+    #endif
   #endif
 #endif
 // template __global__ void kernel_baseline<float, RTILE_Y,HALO>(float*,int,int,float*);

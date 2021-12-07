@@ -27,16 +27,19 @@ void printdiff(REAL* out, REAL* ref, int widthx, int widthy)
   }
 }
 
-int main(int argc, char const *argv[])
+#include "./common/cub_utils.cuh"
+
+int main(int argc, char  *argv[])
 {
   int width_x; 
   int width_y;
   int iteration=3;
   width_x=width_y=4096;//4096;
-  int type=0;//float
-  int check=0;
+  bool fp32=true;//float
+  bool check=false;
+  int bdimx=256;
   bool async=false;
-  // width_y=100;
+
 
   if (argc >= 3) {
     width_y = atoi(argv[1]);
@@ -45,30 +48,24 @@ int main(int argc, char const *argv[])
     if(argc>=4)
     {
       iteration=atoi(argv[3]);
-      if(argc>=5)
-      {
-        type=atoi(argv[4])!=0?1:0;
-        if(argc>=6)
-        {
-          // async=atoi(argv[4])!=0?true:false;
-          // if(argc>=7)
-          // {
-            check=atoi(argv[5])!=0?1:0;
-          // }
-        }
-      }
-    }  
-    else
-    {
-      iteration=3;
     }
   }
+
+  CommandLineArgs args(argc, argv);
+  
+  fp32 = args.CheckCmdLineFlag("fp32");
+  async = args.CheckCmdLineFlag("async");
+  check = args.CheckCmdLineFlag("check");
+  // bdimx = args
+  args.GetCmdLineArgument("bdim", bdimx);
+  if(bdimx==0)bdimx=256;
+
 #ifdef REFCHECK
   iteration=4;
 #endif
 // #endif
 
-  if(type==0)
+  if(fp32)
   {
     #define REAL float
     
@@ -86,7 +83,7 @@ int main(int argc, char const *argv[])
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
     #endif
 
     
@@ -122,7 +119,7 @@ int main(int argc, char const *argv[])
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,iteration);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
 
     #endif
 

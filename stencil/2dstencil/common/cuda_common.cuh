@@ -187,25 +187,29 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
         }
       }
     #else
-      __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+sm_x_base, 
-            src + (l_global_y) * global_x_size + MAX(global_x_base-halo+tid,0)
-              , sizeof(REAL));
-      if(halo>0)
-      {
-        if(tid<halo*2)
+      #if PERKS_ARCH>=800 
+        __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+sm_x_base, 
+              src + (l_global_y) * global_x_size + MAX(global_x_base-halo+tid,0)
+                , sizeof(REAL));
+        if(halo>0)
         {
-          __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+blockDim.x+sm_x_base, 
-                  src + (l_global_y) * global_x_size + MIN(-halo+tid+blockDim.x+global_x_base,global_x_size-1)
-                    , sizeof(REAL));
+          if(tid<halo*2)
+          {
+            __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+blockDim.x+sm_x_base, 
+                    src + (l_global_y) * global_x_size + MIN(-halo+tid+blockDim.x+global_x_base,global_x_size-1)
+                      , sizeof(REAL));
+          }
         }
-      }
-      __pipeline_commit();
+        __pipeline_commit();
+      #endif
     #endif
   }
   if(sync==true)
   {  
     #ifdef ASYNCSM
-      __pipeline_wait_prior(0);
+      #if PERKS_ARCH>=800 
+        __pipeline_wait_prior(0);
+      #endif
     #endif
     __syncthreads();
   }
@@ -217,8 +221,10 @@ __device__ void __forceinline__ pipesync()
 {
   #ifdef ASYNCSM
     {
+      #if PERKS_ARCH>=800 
       __pipeline_commit();
       __pipeline_wait_prior(0);
+      #endif
     }
   #else
     __syncthreads();
