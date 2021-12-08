@@ -11,23 +11,27 @@ source ../temp.sh
 
 # list_used=(${a100_list[@]})
 list_used=(${test_list[@]})
-if ((${GPU}="v100")) 
+if [ "${GPU}" = "v100" ] 
 then
 	list_used=(${v100_list[@]})
-else
+elif [ "${GPU}" = "a100" ]
+then
 	list_used=(${a100_list[@]})
+else
+	echo "usupport" ${GPU}
+	exit 1
 fi
 
 rununit()
 {
 	waittilltemp60c
-	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ${FILE}
+	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
 	waittilltemp60c
-	./*baseline* $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} >> ${FILE}
+	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} >> ./${FILE}
 	waittilltemp60c
-	./*baseline* $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ${FILE}
+	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
 	waittilltemp60c
-	./*baseline* $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} >> ${FILE}
+	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} >> ./${FILE}
 }
 runtest()
 {
