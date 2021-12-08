@@ -24,14 +24,17 @@ fi
 
 rununit()
 {
-	waittilltemp60c
-	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
-	waittilltemp60c
-	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} >> ./${FILE}
-	waittilltemp60c
-	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
-	waittilltemp60c
-	./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} >> ./${FILE}
+	for((i=0; i<${TEST}; i++))
+	do
+		waittilltemp60c
+		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
+		waittilltemp60c
+		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
+		waittilltemp60c
+		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} >> ./${FILE}
+	done
 }
 runtest()
 {
@@ -53,6 +56,8 @@ runtest()
 	rununit
 }
 
+TEST=1
+
 CHECK="--check"
 ITER=3
 FILE=baseline_fp32_${GPU}_check.log
@@ -71,9 +76,12 @@ do
 	runtest	
 done 
 
-
+#experiment would run twice
 CHECK=""
 ITER=1000
+TEST=2
+
+
 FILE=baseline_fp32_${GPU}.log
 FLOATTYPE="--fp32"
 y=${list_used[0]}
@@ -81,6 +89,7 @@ for x in ${list_used[@]};
 do
 	runtest	
 done 
+
 
 FILE=baseline_fp64_${GPU}.log
 FLOATTYPE="--fp64"
