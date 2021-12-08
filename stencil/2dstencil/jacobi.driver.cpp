@@ -1,4 +1,6 @@
 #include "./common/common.hpp"
+// #include "./common/cuda_common.cuh"
+// #include <cuda_runtime.h>
 #include "./common/jacobi_reference.hpp"
 #include "./common/jacobi_cuda.cuh"
 #include "config.cuh"
@@ -45,20 +47,21 @@ int main(int argc, char  *argv[])
     width_y = atoi(argv[1]);
     width_x = atoi(argv[2]);
 
-    if(argc>=4)
-    {
-      iteration=atoi(argv[3]);
-    }
+    // if(argc>=4)
+    // {
+    //   iteration=atoi(argv[3]);
+    // }
   }
 
   CommandLineArgs args(argc, argv);
-  
   fp32 = args.CheckCmdLineFlag("fp32");
   async = args.CheckCmdLineFlag("async");
   check = args.CheckCmdLineFlag("check");
   // bdimx = args
   args.GetCmdLineArgument("bdim", bdimx);
+  args.GetCmdLineArgument("iter", iteration);
   if(bdimx==0)bdimx=256;
+  if(iteration==0)iteration=3;
 
 #ifdef REFCHECK
   iteration=4;
@@ -79,11 +82,11 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
     #endif
 
     
@@ -115,12 +118,16 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, iteration, async);
+      
+      // printf("%f\n",input[10]);
+      // printf("%f\n",output[10]);
+
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
-
+      // printf("%f\n",output[10]);
     #endif
 
     #ifdef REFCHECK
@@ -142,8 +149,19 @@ int main(int argc, char  *argv[])
     delete[] output;
     delete[] output_gold;
   }
+  // Check_CUDA_Error("147");
 
-
+// #define cudaCheckError() {                                          \
+//  cudaError_t e=cudaGetLastError();                                 \
+//  if(e!=cudaSuccess) {                                              \
+//    printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           \
+//  }                                                                 \
+// }
+  // cudaDeviceSynchronize();
+  // cudaError_t e=cudaGetLastError();                                 
+  //  if(e!=cudaSuccess) {                                              
+  //    printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           
+  //  } 
   // #undef REAL
   /* code */
   return 0;

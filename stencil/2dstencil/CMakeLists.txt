@@ -15,11 +15,14 @@ project(PERKS_2DSTENCIL VERSION 1.0)
 #                           )
 
 # specify the C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # enable_language(CUDA)
 # add_library("jacobi_naive" SHARED ${CMAKE_SOURCE_DIR}/jacobi-naive.cu)
+
+# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/temp.sh ${CMAKE_CURRENT_BINARY_DIR}/temp.sh COPYONLY)
+# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/iteratedomain.sh ${CMAKE_CURRENT_BINARY_DIR}/iteratedomain.sh COPYONLY)
 
 add_subdirectory(js2d5pt)
 add_subdirectory(js2d9pt)

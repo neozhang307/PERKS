@@ -39,6 +39,7 @@
   #define WARMUPRUN
 #endif
 
+#define RUNS (10)
 
 namespace cg = cooperative_groups;
 
@@ -99,21 +100,25 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
     printf("code is run in %d\n",ptx);
   #endif
 /*************************************/
-  if(ptx<800&&async==true)printf("error async not support\n");//lower ptw not support 
-
+  if(ptx<800&&async==true)
+  {
+    printf("error async not support\n");//lower ptw not support 
+    return;
+  }
 //initialization
 #if defined(PERSISTENT)
+
   #ifndef BOX
-  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+  auto execute_kernel = async?kernel_persistent_baseline_async<REAL,RTILE_Y,HALO>: kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
   #else
-  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+  auto execute_kernel = async?kernel_persistent_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #if defined(BASELINE_CM)||defined(BASELINE)
   #ifndef BOX
-    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
+    auto execute_kernel = async?kernel_baseline_async<REAL,RTILE_Y,HALO>:kernel_baseline<REAL,RTILE_Y,HALO>;
   #else
-    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
+    auto execute_kernel = async?kernel_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #ifdef NAIVE
@@ -317,23 +322,29 @@ size_t executeSM = 0;
   }
 #endif
 #ifdef PERSISTENTLAUNCH
-  cudaLaunchCooperativeKernel((void*)execute_kernel, 
+  for(int i=0; i<RUNS; i++)
+  {
+    cudaLaunchCooperativeKernel((void*)execute_kernel, 
             executeGridDim, executeBlockDim, 
             ExecuteKernelArgs, 
             //KernelArgs4,
             executeSM,0);
+  }
 #endif
 #ifdef TRADITIONLAUNCH
-  execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-          (input, width_y, width_x, __var_2__);
-
-  for(int i=1; i<iteration; i++)
+  for(int i=0; i<RUNS; i++)
   {
-     execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-          (__var_2__, width_y, width_x , __var_1__);
-    REAL* tmp = __var_2__;
-    __var_2__=__var_1__;
-    __var_1__= tmp;
+    execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+            (input, width_y, width_x, __var_2__);
+
+    for(int i=1; i<iteration; i++)
+    {
+       execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+            (__var_2__, width_y, width_x , __var_1__);
+      REAL* tmp = __var_2__;
+      __var_2__=__var_1__;
+      __var_1__= tmp;
+    }
   }
   cudaCheckError();
 #endif
@@ -352,32 +363,32 @@ size_t executeSM = 0;
 #endif
 
 #ifdef __PRINT__
-  #ifdef BASELINE
-    #ifndef DA100X
-      printf("bsln\t");
-    #else
-      printf("asyncbsln\t");
-    #endif
-  #endif 
-  #ifdef BASELINE_CM
-    #ifndef DA100X
-      printf("bsln_cm\t");
-    #else
-      printf("asyncbsln_cm\t");
-    #endif
-  #endif 
+  // #ifdef BASELINE
+  //   #ifndef DA100X
+  //     printf("bsln\t");
+  //   #else
+  //     printf("asyncbsln\t");
+  //   #endif
+  // #endif 
+  // #ifdef BASELINE_CM
+  //   #ifndef DA100X
+  //     printf("bsln_cm\t");
+  //   #else
+  //     printf("asyncbsln_cm\t");
+  //   #endif
+  // #endif 
   
-  #ifdef NAIVE
-    printf("naive\t");
-  #endif 
+  // #ifdef NAIVE
+  //   printf("naive\t");
+  // #endif 
 
-  #ifdef PERSISTENT
-    #ifndef DA100X
-      printf("psstnt\t");
-    #else
-      printf("asyncpsstnt\t");
-    #endif
-  #endif
+  // #ifdef PERSISTENT
+  //   #ifndef DA100X
+  //     printf("psstnt\t");
+  //   #else
+  //     printf("asyncpsstnt\t");
+  //   #endif
+  // #endif
 
   // #ifdef GEN
   //     printf("gen"); 
@@ -402,9 +413,10 @@ size_t executeSM = 0;
 #ifdef __PRINT__
   printf("%d\t%d\t%d\t",ptx,sizeof(REAL)/4,(int)async);
   printf("%d\t%d\t%d\t",width_x,width_y,iteration);
-  printf("<%d,%d>\t<%d,%d>\t%d\t0\t0\t",executeBlockDim.x,1,
+  printf("%d\t<%d,%d>\t%d\t",executeBlockDim.x,
         executeGridDim.x,executeGridDim.y,
         (executeGridDim.x)*(executeGridDim.y)/sm_count);
+  printf("%f\t",(double)sharememory_basic/1024);
 #endif
 
 #ifdef _TIMER_
@@ -413,12 +425,12 @@ size_t executeSM = 0;
   float elapsedTime;
   cudaEventElapsedTime(&elapsedTime,_forma_timer_start_,_forma_timer_stop_);
   #ifdef __PRINT__
-    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ elapsedTime/1000/1000);
+    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ (elapsedTime/RUNS)/1000/1000);
   #else
-    printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
-    printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
-    printf("[FORMA] Speed(GFLOPS/s) : %lf\n", (REAL)17*iteration*(width_y)*(width_x)/ elapsedTime/1000/1000);
-    printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000);
+    printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime/RUNS);
+    printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000*RUNS);
+    printf("[FORMA] Speed(GFLOPS/s) : %lf\n", (REAL)17*iteration*(width_y)*(width_x)/ elapsedTime/1000/1000*RUNS);
+    printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000*RUNS);
     printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
     printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
     #if defined(GEN) || defined(MIX)
@@ -438,7 +450,8 @@ size_t executeSM = 0;
   cudaDeviceSynchronize();
   cudaCheckError();
 #endif
-
+  cudaDeviceSynchronize();
+  cudaCheckError();
 #if defined(GEN) || defined(PERSISTENT)
   if(iteration%2==1)
     cudaMemcpy(__var_0__,__var_2__, sizeof(REAL)*((width_y-0)*(width_x-0)), cudaMemcpyDeviceToHost);
@@ -449,6 +462,7 @@ size_t executeSM = 0;
 #endif
 /*Kernel Launch End */
 /* Host Free Begin */
+  // printf("__var_0__=%f\n",__var_0__[10]);
   cudaFree(input);
   cudaFree(__var_1__);
   cudaFree(__var_2__);
@@ -460,7 +474,7 @@ size_t executeSM = 0;
   cudaFree(L2_cache3);
 #endif
   // cudaFree(L2_cache4);
-
+  // cudaCheckError();
 }
 
 PERKS_INITIALIZE_ALL_TYPE(PERKS_DECLARE_INITIONIZATION_ITERATIVE);

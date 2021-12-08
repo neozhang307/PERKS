@@ -10,6 +10,7 @@ string(SUBSTRING "${CMAKE_CURRENT_SOURCE_DIR}" ${beg} ${end} type)
 #message("${beg} ${end} ${type}")
 
 set(reference_goal "${type}_reference.exe")
+# set_properties(CUDA_ARCHITECTURES "70;80")
 
 add_definitions(-D${type})
 add_library(${type}_jacobi_gold ./jacobi_gold.cpp)
@@ -23,13 +24,17 @@ target_link_libraries(${reference_goal} PUBLIC
                             ${type}_jacobi_gold ${type}_jacobi_gold_gen)
 set_target_properties(${reference_goal} PROPERTIES
                             COMPILE_FLAGS " -DREFCHECK ")       
+# set_target_properties("${reference_goal}" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
 #project(${naive_goal} CUDA)
-set(archlist " -gencode arch=compute_80,code=sm_80 ")
-string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
+# set(archlist " -gencode arch=compute_80,code=sm_80 ")
+# string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
 
-set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,CHECK -DWARMUPRUN -Xptxas \"-v -dlcm=cg\"")
-string(APPEND DEFAULT_COMPILER_FLAG "${archlist}")
+# set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,__PRINT__  -Xptxas \"-v -dlcm=cg\"")
+# @LINGQI: previous experiments show that setting Xptxas might harm performance
+set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,__PRINT__  ")
+#set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,CHECK -DWARMUPRUN -Xptxas \"-v -dlcm=cg\"")
+# string(APPEND DEFAULT_COMPILER_FLAG "${archlist}")
 
 function(subcompile prefix default_compiler_flag aim)
     message("aim is ${aim}")
@@ -65,10 +70,14 @@ function(subcompile prefix default_compiler_flag aim)
     message("${LOCAL_LIB}")
 
     add_library(${libraryname} ${LOCAL_SOURCE})
+    set_target_properties(${libraryname} PROPERTIES CUDA_ARCHITECTURES "70;80")
+
     #add_library(${libraryname} ${CMAKE_SOURCE_DIR}/jacobi-star.cu)
     set_target_properties(${libraryname} PROPERTIES COMPILE_FLAGS "${local_compiler_flag}")
 
     add_executable(${local_goal} ${LOCAL_DRIVER})
+    set_target_properties("${local_goal}" PROPERTIES CUDA_ARCHITECTURES "70;80")
+   # set_target_properties(${local_goal} PROPERTIES COMPILE_FLAGS "${local_compiler_flag}")
     #add_executable(${local_goal} ${CMAKE_SOURCE_DIR}/jacobi.driver.cpp)
     target_link_libraries(${local_goal} PUBLIC ${libraryname} ${LOCAL_LIB} ${prefix}_jacobi_gold ${prefix}_jacobi_gold_gen)
 endfunction()
@@ -79,6 +88,10 @@ function(mylib sublib subkernelfile compiler_flag)
 endfunction()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories("/usr/local/cuda/include")
+# LINK_DIRECTORIES("/usr/local/cuda/lib64")
+# # find_library(CUDA cuda)
+# link_libraries(cudart)
 
 # mylib("jacobi_naive" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" "${DEFAULT_COMPILER_FLAG}")
 # mylib("jacobi_baseline" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}")
@@ -92,15 +105,19 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "jacobi_gen")
 
 # mylib("${type}_naive" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" "${DEFAULT_COMPILER_FLAG}")
-# mylib("${type}_baseline" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}")
+mylib("${type}_baseline" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}")
+set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
+mylib("${type}_baseline_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DSMASYNC")
+set_target_properties("${type}_baseline_async" PROPERTIES CUDA_ARCHITECTURES "80")
+
 # mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT")
-mylib("${type}_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG}")
+#mylib("${type}_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG}")
 
 # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive")
 # # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline")
+subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" "${type}_baseline_async")
 # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent")
-subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen")
+#subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen")
 # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
 
 
