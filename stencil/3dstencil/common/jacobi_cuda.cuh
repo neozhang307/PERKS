@@ -4,9 +4,9 @@
 
 //this is where the aimed implementation located
 template<class REAL>
-void jacobi_iterative(REAL*, int, int, REAL*, int, int, bool);
+void j3d_iterative(REAL*, int, int, int, REAL*, int);
 
 #define PERKS_DECLARE_INITIONIZATION_ITERATIVE(_type) \
-    void jacobi_iterative(_type*,int,int,_type*, int, int, bool);
+    void j3d_iterative(_type*,int,int, int,_type*, int);
 
 #endif

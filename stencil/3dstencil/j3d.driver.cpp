@@ -57,14 +57,17 @@ int main(int argc, char** argv) {
 // #ifndef CHECK
   // j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output,iteration);
 // #else
-  iteration=iteration>3?3:iteration;
+  iteration=iteration==0?3:iteration;
 #ifdef REFCHECK
   iteration=4;
   // j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output,iteration);
   j3d_gold((REAL*)input, height, width_y, width_x, (REAL*)output);
   j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
-#endif
+#else
+  j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output,iteration);
+  j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
 
+#endif
 #ifdef PRINT_OUTPUT
   printf("Output :\n");
   print3DArray<REAL>

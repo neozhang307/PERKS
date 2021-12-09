@@ -2,6 +2,7 @@
 #include "stdio.h"
 
 #ifndef CUDACOMMON
+#define CUDACOMMON
 
 #ifndef __CUDA_ARCH__
     #define PERKS_ARCH 000
@@ -11,7 +12,7 @@
     #elif __CUDA_ARCH__==700
         #define PERKS_ARCH 700
     #elif __CUDA_ARCH__==600
-        #define  600
+        #define PERKS_ARCH 600
     #else
         #error "unsupport"
     #endif
@@ -25,7 +26,6 @@
   #include <cuda_pipeline.h>
 #endif
 
-#define CUDACOMMON
 extern __host__ __device__ __forceinline__ int MAX(int a, int b) { return a > b ? a : b; }
 extern __host__ __device__ __forceinline__ int MIN(int a, int b) { return a < b ? a : b; }
 extern __host__ __device__ __forceinline__ int CEIL(int a, int b) { return ( (a) % (b) == 0 ? (a) / (b) :  ( (a) / (b) + 1 ) ); }
