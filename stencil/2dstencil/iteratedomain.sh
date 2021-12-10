@@ -26,12 +26,15 @@ rununit()
 {
 	for((i=0; i<${TEST}; i++))
 	do
-		waittilltemp60c
-		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
+		if [ "${GPU}" = "a100" ]
+		then
+			waittilltemp60c
+			./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
+			waittilltemp60c
+			./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
+		fi
 		waittilltemp60c
 		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=128 ${FLOATTYPE} ${CHECK} >> ./${FILE}
-		waittilltemp60c
-		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} --async >> ./${FILE}
 		waittilltemp60c
 		./*baseline.exe $WIDTH $HEIGHT --iter=${ITER} --bdim=256 ${FLOATTYPE} ${CHECK} >> ./${FILE}
 	done
@@ -63,6 +66,7 @@ ITER=3
 FILE=baseline_fp32_${GPU}_check.log
 FLOATTYPE="--fp32"
 y=${list_used[0]}
+rm FILE
 for x in ${list_used[@]};
 do
 	runtest	
@@ -71,6 +75,7 @@ done
 FILE=baseline_fp64_${GPU}_check.log
 FLOATTYPE="--fp64"
 y=${list_used[0]}
+rm FILE
 for x in ${list_used[@]};
 do
 	runtest	
@@ -85,6 +90,7 @@ TEST=2
 FILE=baseline_fp32_${GPU}.log
 FLOATTYPE="--fp32"
 y=${list_used[0]}
+rm FILE
 for x in ${list_used[@]};
 do
 	runtest	
@@ -94,6 +100,7 @@ done
 FILE=baseline_fp64_${GPU}.log
 FLOATTYPE="--fp64"
 y=${list_used[0]}
+rm FILE
 for x in ${list_used[@]};
 do
 	runtest	
