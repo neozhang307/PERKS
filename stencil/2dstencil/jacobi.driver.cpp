@@ -46,7 +46,8 @@ int main(int argc, char  *argv[])
   if (argc >= 3) {
     width_y = atoi(argv[1]);
     width_x = atoi(argv[2]);
-
+    width_x = width_x==0?2048:width_x;
+    width_y = width_y==0?2048:width_y;
     // if(argc>=4)
     // {
     //   iteration=atoi(argv[3]);
