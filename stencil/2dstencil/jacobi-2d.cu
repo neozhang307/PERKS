@@ -25,7 +25,7 @@
 #if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
   #define TRADITIONLAUNCH
 #endif
-#if defined(GEN)||defined(MIX)||defined(PERSISTENT)
+#if defined(GEN)||defined(PERSISTENT)
   #define PERSISTENTLAUNCH
 #endif
 #if defined PERSISTENTLAUNCH||defined(BASELINE_CM)
@@ -70,29 +70,12 @@ void host_printptx(int&result)
 #ifndef RTILE_Y
 #define RTILE_Y (8)
 #endif
-// #ifndef bdimx
-// #define bdimx (256)
-// #endif
-
-// #define bdimx (bdimx)
-
-// #define BASIC_bdimx (bdimx+2*HALO)
-// #define BASIC_TILE_Y (RTILE_Y+2*HALO)
-// #define BASIC_SM_SPACE (BASIC_bdimx)*(BASIC_TILE_Y)
-
-
-// #define TOTAL_SM_TILE_Y (RTILE_Y*SM_FOLER_Y)
-// #define TOTAL_REG_TILE_Y (RTILE_Y*REG_FOLDER_Y)
-// #define TOTAL_SM_CACHE_SPACE (bdimx+2*HALO)*(TOTAL_SM_TILE_Y+2*HALO)
-
-// #define TILE_Y (TOTAL_SM_TILE_Y+TOTAL_REG_TILE_Y)
-
 
 
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int iteration, bool async){
+void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int iteration, bool async, bool useSM){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
   int ptx;
@@ -131,9 +114,20 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #endif 
 #ifdef GEN
   #ifndef BOX
-  auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>;
+  auto execute_kernel = async?
+          (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
+          kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+          :
+          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
+            kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>);
   #else
-  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>;
+  auto execute_kernel = async?
+          (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
+            kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+            :
+          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
+            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+          ;
   #endif
   //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
 #endif
@@ -183,52 +177,12 @@ size_t executeSM = 0;
 
 #endif
 
-  #ifdef PERSISTENT
-    size_t max_sm_flder=0;
-  #endif 
 
-  #define halo HALO
-  #if defined(GEN) || defined(MIX)
-  size_t max_sm_flder=0;
-  max_sm_flder=(SharedMemoryUsed/sizeof(REAL)
-                          -2*HALO*isBOX
-                          -basic_sm_space
-                          -2*HALO*(REG_FOLDER_Y)*RTILE_Y
-                          -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
-
-  // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
-  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
-  size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
-  executeSM=sharememory_basic+y_axle_halo;
-  executeSM+=sm_cache_size;
-  #undef halo
-#ifndef __PRINT__
-  printf("the max flder is %ld and the total sm size is %ld\n", max_sm_flder, executeSM);
-#endif
-
-  //size_t sharememory3=sharememory_basic+(HALO*2*(TILE_Y))*sizeof(REAL);
-  //size_t sharememory4=sharememory3-(STILE_SIZE*sizeof(REAL));
-#endif
 
 
 #ifdef PERSISTENTTHREAD
   int numBlocksPerSm_current=0;
 
-  #ifdef MIX
-    if(SM_FOLER_Y!=0)
-    {
-      // cudaLaunchCooperativeKernel((void*)kernel_mix, grid_dim, block_dim, KernelArgs2,sharememory3,0);
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_mix, bdimx, sharememory3);
-    }
-    else
-    {
-      // cudaLaunchCooperativeKernel((void*)kernel_mix_reg, grid_dim, block_dim, KernelArgs2,sharememory4,0);
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_mix_reg, bdimx, sharememory4);
-    }
-  
-  #endif
   #if defined(BASELINE_CM)||defined(PERSISTENT)||defined(GEN)
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
@@ -240,6 +194,38 @@ size_t executeSM = 0;
   dim3 executeBlockDim=block_dim;
   dim3 executeGridDim=grid_dim;
 #endif 
+
+  #ifdef PERSISTENT
+    size_t max_sm_flder=0;
+  #endif
+
+  #define halo HALO
+  #if defined(GEN) 
+
+  size_t max_sm_flder=0;
+  if(useSM)
+  {
+    max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current
+                            -2*HALO*isBOX
+                            -basic_sm_space
+                            -2*HALO*(REG_FOLDER_Y)*RTILE_Y
+                            -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+
+    // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
+    size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
+    size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+    executeSM=sharememory_basic+y_axle_halo;
+    executeSM+=sm_cache_size;
+  }
+  #undef halo
+
+  #ifndef __PRINT__
+    printf("the max flder is %ld and the total sm size is %ld/block\n", max_sm_flder, executeSM);
+  #endif
+
+  #endif
+
+
 #ifdef NAIVE
   dim3 block_dim_1(MIN(width_x,bdimx),1);
   dim3 grid_dim_1(width_x/MIN(width_x,bdimx),width_y/1);
@@ -257,25 +243,18 @@ size_t executeSM = 0;
 #endif
 //in order to get a better performance, warmup run is necessary.
 
-#ifdef MIX
-  int l_iteration=iteration;
-  void* KernelArgs2[] ={(void**)&input,(void**)&width_y,
-    (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache1,(void*)&L2_cache1,
-    (void*)&l_iteration};
-#endif
 
 #if defined(GEN) || defined(PERSISTENT)
   int l_iteration=iteration;
   void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
     (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
     (void*)&l_iteration, (void*)&max_sm_flder};
-  int warmupiteration=1;
   #ifdef WARMUPRUN
+    int warmupiteration=1;
     void* KernelArgs_NULL[] ={(void**)&__var_2__,(void**)&width_y,
       (void*)&width_x,(void*)&__var_1__,(void*)&L2_cache3,(void*)&L2_cache4,
       (void*)&warmupiteration, (void *)&max_sm_flder};
   #endif
-
 #endif
 
 #if defined(GEN) && defined(L2PER)
@@ -406,21 +385,14 @@ size_t executeSM = 0;
 #endif
 /*Kernel Launch End */
 /* Host Free Begin */
-  // printf("__var_0__=%f\n",__var_0__[10]);
   cudaFree(input);
   cudaFree(__var_1__);
   cudaFree(__var_2__);
 
-  // cudaFree(L2_cache);
-  // cudaFree(L2_cache1);
-  // cudaFree(L2_cache2);
 #if defined(GEN) || defined(PERSISTENT)
   cudaFree(L2_cache3);
 #endif
-  // printf("__var_0__ is %f\n",__var_0__[100]);
-  // printf("input is %f\n",h_input[100]);
-  // cudaFree(L2_cache4);
-  // cudaCheckError();
+
 }
 
 PERKS_INITIALIZE_ALL_TYPE(PERKS_DECLARE_INITIONIZATION_ITERATIVE);

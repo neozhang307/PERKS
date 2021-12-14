@@ -38,7 +38,7 @@ int main(int argc, char  *argv[])
   bool check=false;
   int bdimx=256;
   bool async=false;
-
+  bool useSM=false;
 
   if (argc >= 3) {
     width_y = atoi(argv[1]);
@@ -55,6 +55,7 @@ int main(int argc, char  *argv[])
   fp32 = args.CheckCmdLineFlag("fp32");
   async = args.CheckCmdLineFlag("async");
   check = args.CheckCmdLineFlag("check");
+  useSM = args.CheckCmdLineFlag("usesm");
   // bdimx = args
   args.GetCmdLineArgument("bdim", bdimx);
   args.GetCmdLineArgument("iter", iteration);
@@ -79,7 +80,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async,useSM);
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
@@ -115,7 +116,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, iteration, async);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, iteration, async, useSM);
       
   
       if(check!=0)
@@ -144,20 +145,6 @@ int main(int argc, char  *argv[])
     delete[] output;
     delete[] output_gold;
   }
-  // Check_CUDA_Error("147");
 
-// #define cudaCheckError() {                                          \
-//  cudaError_t e=cudaGetLastError();                                 \
-//  if(e!=cudaSuccess) {                                              \
-//    printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           \
-//  }                                                                 \
-// }
-  // cudaDeviceSynchronize();
-  // cudaError_t e=cudaGetLastError();                                 
-  //  if(e!=cudaSuccess) {                                              
-  //    printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           
-  //  } 
-  // #undef REAL
-  /* code */
   return 0;
 }

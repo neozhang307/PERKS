@@ -10,9 +10,9 @@
 #include <cooperative_groups.h>
 
 #ifdef SMASYNC
-  #if PERKS_ARCH<800 
-    #error "unsupport architecture"
-  #endif
+  // #if PERKS_ARCH<800 
+    // #error "unsupport architecture"
+  // #endif
   #include <cooperative_groups/memcpy_async.h>
   #include <cuda_pipeline.h>
 #endif
@@ -21,12 +21,8 @@ namespace cg = cooperative_groups;
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
-__global__ void 
-#ifndef BOX
-kernel_general
-#else
-kernel_general_box
-#endif
+// __launch_bounds__(256, minblocks)
+__device__ __forceinline__ void inner_general
 (REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__, 
   REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
@@ -488,8 +484,37 @@ kernel_general_box
   #undef REG2REG
 }
 
-#ifndef CONFIGURE
 
+template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
+__global__ void 
+#ifndef BOX
+  #ifdef SMASYNC
+  kernel_general_async
+  #else 
+  kernel_general
+  #endif
+#else
+  #ifdef SMASYNC
+  kernel_general_box_async
+  #else 
+  kernel_general_box
+  #endif
+#endif
+(REAL * __restrict__ input, int width_y, int width_x, 
+  REAL * __restrict__ __var_4__, 
+  REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
+  int iteration,
+  int max_sm_flder)
+{
+  inner_general<REAL, LOCAL_TILE_Y, halo, reg_folder_y, UseSMCache>( input,  width_y,  width_x, 
+    __var_4__, 
+    l2_cache_o, l2_cache_i,
+    iteration,
+    max_sm_flder);
+}
+
+#ifndef CONFIGURE
+#ifndef SMASYNC
   #ifndef BOX
       PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,true);
       PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,false);
@@ -497,7 +522,15 @@ kernel_general_box
       PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,true);
       PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,false);
   #endif
-
+#else 
+  #ifndef BOX
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,true);
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #else
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,true);
+      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,false);
+  #endif
+#endif 
 #else
   #ifdef USESM
     #define isUSESM true
