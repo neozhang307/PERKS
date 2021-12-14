@@ -39,8 +39,9 @@
   #define WARMUPRUN
 #endif
 
-#define RUNS (10)
-
+#ifndef RUNS
+  #define RUNS (1)
+#endif
 namespace cg = cooperative_groups;
 
 
@@ -130,9 +131,9 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #endif 
 #ifdef GEN
   #ifndef BOX
-  auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>;
+  auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>;
   #else
-  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>;
+  auto execute_kernel = kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>;
   #endif
   //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
 #endif
@@ -268,11 +269,11 @@ size_t executeSM = 0;
   void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
     (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
     (void*)&l_iteration, (void*)&max_sm_flder};
-
+  int warmupiteration=1;
   #ifdef WARMUPRUN
     void* KernelArgs_NULL[] ={(void**)&__var_2__,(void**)&width_y,
       (void*)&width_x,(void*)&__var_1__,(void*)&L2_cache3,(void*)&L2_cache4,
-      (void*)&l_iteration, (void *)&max_sm_flder};
+      (void*)&warmupiteration, (void *)&max_sm_flder};
   #endif
 
 #endif
@@ -311,16 +312,7 @@ size_t executeSM = 0;
   cudaEventCreate(&_forma_timer_stop_);
   cudaEventRecord(_forma_timer_start_,0);
 #endif
-#ifdef MIX
-  if(SM_FOLER_Y!=0)
-  {
-    cudaLaunchCooperativeKernel((void*)kernel_mix, grid_dim, block_dim, KernelArgs2,sharememory3,0);
-  }
-  else
-  {
-    cudaLaunchCooperativeKernel((void*)kernel_mix_reg, grid_dim, block_dim, KernelArgs2,sharememory4,0);
-  }
-#endif
+
 #ifdef PERSISTENTLAUNCH
   for(int i=0; i<RUNS; i++)
   {
@@ -346,7 +338,6 @@ size_t executeSM = 0;
       __var_1__= tmp;
     }
   }
-  cudaCheckError();
 #endif
 
 
@@ -362,53 +353,6 @@ size_t executeSM = 0;
 
 #endif
 
-#ifdef __PRINT__
-  // #ifdef BASELINE
-  //   #ifndef DA100X
-  //     printf("bsln\t");
-  //   #else
-  //     printf("asyncbsln\t");
-  //   #endif
-  // #endif 
-  // #ifdef BASELINE_CM
-  //   #ifndef DA100X
-  //     printf("bsln_cm\t");
-  //   #else
-  //     printf("asyncbsln_cm\t");
-  //   #endif
-  // #endif 
-  
-  // #ifdef NAIVE
-  //   printf("naive\t");
-  // #endif 
-
-  // #ifdef PERSISTENT
-  //   #ifndef DA100X
-  //     printf("psstnt\t");
-  //   #else
-  //     printf("asyncpsstnt\t");
-  //   #endif
-  // #endif
-
-  // #ifdef GEN
-  //     printf("gen"); 
-  //   #else
-  //     printf("asyncgen"); 
-  //   #endif
-  //   #if REG_FOLDER_Y==0 && SM_FOLER_Y ==0
-  //     printf("\t");
-  //   #endif
-  //   #if REG_FOLDER_Y==0 && SM_FOLER_Y !=0
-  //     printf("_sm\t");
-  //   #endif
-  //   #if REG_FOLDER_Y!=0 && SM_FOLER_Y ==0
-  //     printf("_reg\t");
-  //   #endif
-  //   #if REG_FOLDER_Y!=0 && SM_FOLER_Y !=0
-  //     printf("_mix\t");
-  //   #endif
-  // #endif
-#endif 
 
 #ifdef __PRINT__
   printf("%d\t%d\t%d\t",ptx,sizeof(REAL)/4,(int)async);
@@ -473,6 +417,8 @@ size_t executeSM = 0;
 #if defined(GEN) || defined(PERSISTENT)
   cudaFree(L2_cache3);
 #endif
+  // printf("__var_0__ is %f\n",__var_0__[100]);
+  // printf("input is %f\n",h_input[100]);
   // cudaFree(L2_cache4);
   // cudaCheckError();
 }

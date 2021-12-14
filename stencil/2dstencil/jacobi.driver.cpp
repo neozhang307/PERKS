@@ -8,9 +8,6 @@
 #include <cstdio>
 
 #define TOLERANCE 1e-5
-//#ifndef HALO 
-//#define HALO 1
-//#endif
 
 template<class REAL>
 void printdiff(REAL* out, REAL* ref, int widthx, int widthy)
@@ -67,7 +64,6 @@ int main(int argc, char  *argv[])
 #ifdef REFCHECK
   iteration=4;
 #endif
-// #endif
 
   if(fp32)
   {
@@ -121,26 +117,24 @@ int main(int argc, char  *argv[])
     #else
       jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, iteration, async);
       
-      // printf("%f\n",input[10]);
-      // printf("%f\n",output[10]);
-
+  
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }
-      // printf("%f\n",output[10]);
     #endif
 
     #ifdef REFCHECK
       int halo=HALO*iteration;
     #else
       int halo=HALO*iteration;
-      // int halo=0;
     #endif
     if(check!=0){
+      
       double error =
         checkError2D<REAL>
         (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
+      
       printf("[Test] RMS Error : %e\n",error);
       if (error > TOLERANCE)
         return -1;
