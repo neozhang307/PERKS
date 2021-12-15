@@ -37,6 +37,7 @@ int main(int argc, char  *argv[])
   bool fp32=true;//float
   bool check=false;
   int bdimx=256;
+  int blkpsm=0;
   bool async=false;
   bool useSM=false;
 
@@ -59,6 +60,7 @@ int main(int argc, char  *argv[])
   // bdimx = args
   args.GetCmdLineArgument("bdim", bdimx);
   args.GetCmdLineArgument("iter", iteration);
+  args.GetCmdLineArgument("blkpsm", blkpsm);
   if(bdimx==0)bdimx=256;
   if(iteration==0)iteration=3;
 
@@ -80,7 +82,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,iteration,async,useSM);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM);
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
@@ -116,7 +118,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, iteration, async, useSM);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM);
       
   
       if(check!=0)

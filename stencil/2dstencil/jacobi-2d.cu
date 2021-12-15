@@ -75,7 +75,7 @@ void host_printptx(int&result)
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int iteration, bool async, bool useSM){
+void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
   int ptx;
@@ -183,16 +183,23 @@ size_t executeSM = 0;
 #ifdef PERSISTENTTHREAD
   int numBlocksPerSm_current=0;
 
-  #if defined(BASELINE_CM)||defined(PERSISTENT)||defined(GEN)
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+  cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
-  #endif
-
+  if(blkpsm!=0)
+  {
+    numBlocksPerSm_current=min(numBlocksPerSm_current,blkpsm);
+  }
   dim3 block_dim(bdimx);
   dim3 grid_dim(width_x/bdimx,sm_count*numBlocksPerSm_current/(width_x/bdimx));
   
   dim3 executeBlockDim=block_dim;
   dim3 executeGridDim=grid_dim;
+
+  #ifndef __PRINT__
+    printf("blk per sm is %d/%d\n", numBlocksPerSm_current,blkpsm);
+    printf("grid is (%d,%d)\n", grid_dim.x, grid_dim.y);
+  #endif
+
 #endif 
 
   #ifdef PERSISTENT
@@ -257,6 +264,7 @@ size_t executeSM = 0;
   #endif
 #endif
 
+//@LINGQI: l2 cache setting not show performance difference. 
 #if defined(GEN) && defined(L2PER)
     // REAL l2perused;
     // size_t inner_window_size = 30*1024*1024;
