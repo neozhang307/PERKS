@@ -91,14 +91,15 @@ __device__ __forceinline__ void inner_general
   
   const int p_y =  blockIdx.y * (blocksize_y) + (blockIdx.y<=y_quotient?blockIdx.y:y_quotient);
   blocksize_y += (blockIdx.y<y_quotient?1:0);
-  const int p_y_cache = p_y + (blocksize_y-total_reg_tile_y-total_sm_tile_y);
+  const int p_y_cache_end = p_y + total_reg_tile_y + total_sm_tile_y;
+  const int p_y_end = p_y + (blocksize_y);
 
   //load data global to register
   // #pragma unroll
   if(UseRegCache)
   {
     global2reg<REAL,sizeof_rspace,total_reg_tile_y>(input, r_space,
-                                              p_y_cache, width_y,
+                                              p_y, width_y,
                                               p_x+tid, width_x,
                                               halo);
   }
@@ -107,7 +108,7 @@ __device__ __forceinline__ void inner_general
   {
     global2sm<REAL,0>(input,sm_space,
                                         total_sm_tile_y,
-                                        p_y_cache+total_reg_tile_y, width_y,
+                                        p_y+total_reg_tile_y, width_y,
                                         p_x, width_x,
                                         ps_y, ps_x, tile_x_with_halo,
                                         tid);
@@ -115,18 +116,18 @@ __device__ __forceinline__ void inner_general
   //load ew boundary
   if(UseRegCache||UseSMCache)
   {
-    for(int local_y=tid; local_y<boundary_line_size&&p_y_cache + local_y<width_y; local_y+=blockDim.x)
+    for(int local_y=tid; local_y<boundary_line_size&&p_y + local_y<width_y; local_y+=blockDim.x)
     {
       for(int l_x=0; l_x<halo; l_x++)
       {
         //east
         int global_x = p_x + tile_x + l_x;
         global_x = MIN(width_x-1,global_x);
-        boundary_buffer[e_step+local_y + l_x*boundary_line_size] = input[(p_y_cache + local_y) * width_x + global_x];
+        boundary_buffer[e_step+local_y + l_x*boundary_line_size] = input[(p_y + local_y) * width_x + global_x];
         //west
         global_x = p_x - halo + l_x;
         global_x = MAX(0,global_x);
-        boundary_buffer[w_step+local_y + l_x*boundary_line_size] =  input[(p_y_cache + local_y) * width_x + global_x];
+        boundary_buffer[w_step+local_y + l_x*boundary_line_size] =  input[(p_y + local_y) * width_x + global_x];
       }
     }
     // sdfa
@@ -144,18 +145,10 @@ __device__ __forceinline__ void inner_general
         _Pragma("unroll")
         for(int l_y=0; l_y<halo; l_y++)
         {
-          int global_y = (p_y_cache-halo+l_y);
+          int global_y = (p_y-halo+l_y);
           global_y=MAX(0,global_y);
-          //south
-          // if(UseRegCache)
-          // {
-          //   r_space[l_y]=input[(global_y) * width_x + p_x + tid];
-          // }
-          // else
-          // {
-          //   sm_space[(ps_y - halo + l_y) * tile_x_with_halo + tid + ps_x]=input[(global_y) * width_x + p_x + tid];
-          // }
-          global_y=(p_y_cache+(total_sm_tile_y+total_reg_tile_y)+l_y);
+
+          global_y=(p_y+(total_sm_tile_y+total_reg_tile_y)+l_y);
           global_y=MIN(global_y,width_y-1);
           //north
           if(UseSMCache)
@@ -199,34 +192,7 @@ __device__ __forceinline__ void inner_general
                                                     ps_x, tid,
                                                     tile_x_with_halo);
 
-    for(int global_y=p_y; global_y<p_y_cache; global_y+=LOCAL_TILE_Y)
-    {
 
-      global2sm<REAL,halo>(input, sm_rbuffer,
-                                          LOCAL_TILE_Y, 
-                                          global_y+halo, width_y,
-                                          p_x, width_x,
-                                          ps_y+halo, ps_x, tile_x_with_halo,
-                                          tid);
-      SM2REG<REAL,sizeof_rbuffer, LOCAL_TILE_Y, isBOX>(sm_rbuffer, r_smbuffer, 
-                                                    2*halo,
-                                                    ps_x, tid,
-                                                    tile_x_with_halo,
-                                                    2*halo);
-      REAL sum[LOCAL_TILE_Y];
-      init_reg_array<REAL,LOCAL_TILE_Y>(sum,0);
-      computation<REAL,LOCAL_TILE_Y,halo>(sum,
-                                      sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
-                                      r_smbuffer, halo,
-                                      stencilParaInput);
-      reg2global<REAL,LOCAL_TILE_Y,LOCAL_TILE_Y>(sum, __var_4__, 
-                  global_y,p_y_cache, 
-                  p_x+local_x, width_x);
-      __syncthreads();
-      ptrselfcp<REAL,-halo, halo, halo>(sm_rbuffer, ps_y, LOCAL_TILE_Y, tid, tile_x_with_halo);
-      REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
-                (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
-    }
     __syncthreads();
     //computation of register space
     if(UseRegCache)
@@ -311,7 +277,57 @@ __device__ __forceinline__ void inner_general
                 (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
       }
     }
-    
+    if(UseSMCache)
+    {
+      //ALL information already loaded, 
+      //theoretically can use information inside chip instead of loading from global memory. 
+      global2sm<REAL,halo,ISINITI>(input, sm_rbuffer, 
+                                            halo*2,
+                                            p_y_cache_end-halo, width_y,
+                                            p_x, width_x,
+                                            ps_y-halo, ps_x, tile_x_with_halo,                                    
+                                            tid);
+    }
+    else if(UseRegCache)
+    {
+      __syncthreads();
+      // SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+      //                                               0,
+      //                                               ps_x, tid,
+      //                                               tile_x_with_halo);
+      // __syncthreads();
+      //REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
+                // (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
+    }
+
+    for(int global_y=p_y_cache_end; global_y<p_y_end; global_y+=LOCAL_TILE_Y)
+    {
+
+      global2sm<REAL,halo>(input, sm_rbuffer,
+                                          LOCAL_TILE_Y, 
+                                          global_y+halo, width_y,
+                                          p_x, width_x,
+                                          ps_y+halo, ps_x, tile_x_with_halo,
+                                          tid);
+      SM2REG<REAL,sizeof_rbuffer, LOCAL_TILE_Y, isBOX>(sm_rbuffer, r_smbuffer, 
+                                                    2*halo,
+                                                    ps_x, tid,
+                                                    tile_x_with_halo,
+                                                    2*halo);
+      REAL sum[LOCAL_TILE_Y];
+      init_reg_array<REAL,LOCAL_TILE_Y>(sum,0);
+      computation<REAL,LOCAL_TILE_Y,halo>(sum,
+                                      sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
+                                      r_smbuffer, halo,
+                                      stencilParaInput);
+      reg2global<REAL,LOCAL_TILE_Y,LOCAL_TILE_Y>(sum, __var_4__, 
+                  global_y,p_y_end, 
+                  p_x+local_x, width_x);
+      __syncthreads();
+      ptrselfcp<REAL,-halo, halo, halo>(sm_rbuffer, ps_y, LOCAL_TILE_Y, tid, tile_x_with_halo);
+      REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
+                (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
+    }
     if(iter==iteration-1)break;
     //register memory related boundary
     //south
@@ -368,20 +384,20 @@ __device__ __forceinline__ void inner_general
         //north
         if(UseSMCache)
         {
-          __var_4__[(p_y_cache+(total_sm_tile_y+total_reg_tile_y)-halo+l_y) * width_x + p_x + tid]=sm_space[(ps_y + total_sm_tile_y - halo+l_y) * tile_x_with_halo + tid + ps_x];//boundary_buffer[N_STEP+tid+l_y*TILE_X];//
+          __var_4__[(p_y+(total_sm_tile_y+total_reg_tile_y)-halo+l_y) * width_x + p_x + tid]=sm_space[(ps_y + total_sm_tile_y - halo+l_y) * tile_x_with_halo + tid + ps_x];//boundary_buffer[N_STEP+tid+l_y*TILE_X];//
         }
         else
         {
-          __var_4__[(p_y_cache+(total_sm_tile_y+total_reg_tile_y)-halo+l_y) * width_x + p_x + tid]=r_space[l_y+total_reg_tile_y-halo];
+          __var_4__[(p_y+(total_sm_tile_y+total_reg_tile_y)-halo+l_y) * width_x + p_x + tid]=r_space[l_y+total_reg_tile_y-halo];
         }
          //south
         if(UseRegCache)
         {
-          __var_4__[(p_y_cache+l_y) * width_x + p_x + tid]= r_space[l_y];
+          __var_4__[(p_y+l_y) * width_x + p_x + tid]= r_space[l_y];
         }
         else
         {
-          __var_4__[(p_y_cache+l_y) * width_x + p_x + tid]= sm_space[(ps_y + l_y) * tile_x_with_halo + tid + ps_x];
+          __var_4__[(p_y+l_y) * width_x + p_x + tid]= sm_space[(ps_y + l_y) * tile_x_with_halo + tid + ps_x];
         }
       }
     }
@@ -399,9 +415,9 @@ __device__ __forceinline__ void inner_general
         for(int l_x=0; l_x<halo; l_x++)
         {
            //east
-          l2_cache_o[(((blockIdx.x* 2 + 1 )* halo+l_x)*width_y)  + p_y_cache +lid] = boundary_buffer[e_step+lid +l_x*boundary_line_size];
+          l2_cache_o[(((blockIdx.x* 2 + 1 )* halo+l_x)*width_y)  + p_y +lid] = boundary_buffer[e_step+lid +l_x*boundary_line_size];
           //west
-          l2_cache_o[(((blockIdx.x* 2 + 0) * halo+l_x)*width_y)  + p_y_cache +lid] = boundary_buffer[w_step+lid+l_x*boundary_line_size];
+          l2_cache_o[(((blockIdx.x* 2 + 0) * halo+l_x)*width_y)  + p_y +lid] = boundary_buffer[w_step+lid+l_x*boundary_line_size];
         }
       }
     }
@@ -423,7 +439,7 @@ __device__ __forceinline__ void inner_general
         _Pragma("unroll")
         for(int l_x=0; l_x<halo; l_x++)
         {
-          int cache_y=min(p_y_cache + local_y,width_y-1);
+          int cache_y=min(p_y + local_y,width_y-1);
           // east
            boundary_buffer[e_step+local_y+l_x*boundary_line_size] = ((blockIdx.x == gridDim.x-1)?boundary_buffer[e_step+local_y+(halo-1)*boundary_line_size]:
              l2_cache_i[(((blockIdx.x+1)*2+0)* halo+l_x)*width_y + cache_y]);
@@ -432,18 +448,18 @@ __device__ __forceinline__ void inner_general
             l2_cache_i[(((blockIdx.x-1)*2+1)* halo+l_x)*width_y + cache_y]);
         }
       }
-      for(int local_y=tid; local_y<isBOX&&p_y_cache + local_y + boundary_line_size-isBOX<width_y; local_y+=blockDim.x)
+      for(int local_y=tid; local_y<isBOX&&p_y + local_y + boundary_line_size-isBOX<width_y; local_y+=blockDim.x)
       {
         for(int l_x=0; l_x<halo; l_x++)
         {
           //east
           int global_x = p_x + tile_x + l_x;
           global_x = MIN(width_x-1,global_x);
-          boundary_buffer[e_step+local_y +boundary_line_size-isBOX+ l_x*boundary_line_size] = input[(p_y_cache + local_y+boundary_line_size-isBOX) * width_x + global_x];
+          boundary_buffer[e_step+local_y +boundary_line_size-isBOX+ l_x*boundary_line_size] = input[(p_y + local_y+boundary_line_size-isBOX) * width_x + global_x];
           //west
           global_x = p_x - halo + l_x;
           global_x = MAX(0,global_x);
-          boundary_buffer[w_step+local_y +boundary_line_size-isBOX+ l_x*boundary_line_size] =  input[(p_y_cache + local_y+boundary_line_size-isBOX) * width_x + global_x];
+          boundary_buffer[w_step+local_y +boundary_line_size-isBOX+ l_x*boundary_line_size] =  input[(p_y + local_y+boundary_line_size-isBOX) * width_x + global_x];
         }
       }
     }
@@ -463,7 +479,7 @@ __device__ __forceinline__ void inner_general
   {
     // register->global
     reg2global<REAL, sizeof_rspace, total_reg_tile_y, false>(r_space, __var_4__,
-                                      p_y_cache, width_y,
+                                      p_y, width_y,
                                       p_x+tid, width_x,
                                       0);
   }
@@ -474,7 +490,7 @@ __device__ __forceinline__ void inner_general
     // shared memory -> global
     sm2global<REAL,false>(sm_space, __var_4__, 
                                     total_sm_tile_y,
-                                    p_y_cache+total_reg_tile_y, width_y,
+                                    p_y+total_reg_tile_y, width_y,
                                     p_x, width_x,
                                     ps_y, ps_x, tile_x_with_halo ,
                                     tid);

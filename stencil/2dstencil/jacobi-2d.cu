@@ -185,6 +185,10 @@ size_t executeSM = 0;
 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
+
+  #ifndef __PRINT__
+    printf("blk per sm is %d/%d\n", numBlocksPerSm_current,blkpsm);
+  #endif
   if(blkpsm!=0)
   {
     numBlocksPerSm_current=min(numBlocksPerSm_current,blkpsm);
