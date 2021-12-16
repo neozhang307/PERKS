@@ -28,11 +28,11 @@ Can config the desired setting in [stencil type]/config.cuh
   the builded excutable files is generated in ./build/init/
   
  # TODO
-  1. automatically set register amount (feasically doable), can be refer to ./ProcessCompilerLog.py [WORKING ON IT]
-  2. better print method
-  3. portability (**CAUTION**) REF to BUG
- 
- # BUG 
-- [BUG for portability] only width_x=grid.x*[interger] is supported. 
-- [BUG for portability] For PERKS with cache version only width_y=grid.y*RTILE_Y*[integer] is supported 
+  1. automatically set register amount (feasically doable), can be refer to ./ProcessCompilerLog.py  (DONE)
+  2. better print method            (DONE)
+  3. portability (**CAUTION**) REF to BUG (DONE)
+  
+ # LIMITATION 
+- [for portability] only width_x=grid.x*[interger] is supported. 
+- (FIXED) [BUG for portability] For PERKS with cache version only width_y=grid.y*RTILE_Y*[integer] is supported 
 
