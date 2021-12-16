@@ -21,7 +21,6 @@ namespace cg = cooperative_groups;
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
-// __launch_bounds__(256, minblocks)
 __device__ __forceinline__ void inner_general
 (REAL * __restrict__ input, int width_y, int width_x, 
   REAL * __restrict__ __var_4__, 
@@ -183,18 +182,17 @@ __device__ __forceinline__ void inner_general
     }
 
     //south
+    global2sm<REAL,halo,ISINITI,SYNC>(input, sm_rbuffer, 
+                                            halo*2,
+                                            p_y-halo, width_y,
+                                            p_x, width_x,
+                                            ps_y-halo, ps_x, tile_x_with_halo,
+                                            tid);
 
-      global2sm<REAL,halo,ISINITI,SYNC>(input, sm_rbuffer, 
-                                              halo*2,
-                                              p_y-halo, width_y,
-                                              p_x, width_x,
-                                              ps_y-halo, ps_x, tile_x_with_halo,
-                                              tid);
-
-      SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
-                                                      0,
-                                                      ps_x, tid,
-                                                      tile_x_with_halo);
+    SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+                                                    0,
+                                                    ps_x, tid,
+                                                    tile_x_with_halo);
 
     __syncthreads();
     //computation of register space
@@ -504,20 +502,22 @@ __device__ __forceinline__ void inner_general
   #undef REG2REG
 }
 
-
-template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, bool UseSMCache>
+#define MAXTHREAD (256)
+#define MINBLOCK (1)
+template<class REAL, int LOCAL_TILE_Y, int halo, int reg_folder_y, int minblocks, bool UseSMCache>
+__launch_bounds__(MAXTHREAD, minblocks)
 __global__ void 
 #ifndef BOX
   #ifdef SMASYNC
-  kernel_general_async
+    kernel_general_async
   #else 
-  kernel_general
+    kernel_general
   #endif
 #else
   #ifdef SMASYNC
-  kernel_general_box_async
+    kernel_general_box_async
   #else 
-  kernel_general_box
+    kernel_general_box
   #endif
 #endif
 (REAL * __restrict__ input, int width_y, int width_x, 
@@ -536,19 +536,19 @@ __global__ void
 #ifndef CONFIGURE
 #ifndef SMASYNC
   #ifndef BOX
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,true);
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,false);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,true);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,false);
   #else
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,true);
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,false);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,true);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,false);
   #endif
 #else 
   #ifndef BOX
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,true);
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,false);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,true);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,false);
   #else
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,true);
-      PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,false);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,true);
+      PERKS_INITIALIZE_ALL_TYPE_5ARG(PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC,RTILE_Y,HALO,REG_FOLDER_Y,MINBLOCK,false);
   #endif
 #endif 
 #else
@@ -558,11 +558,19 @@ __global__ void
     #define isUSESM false
   #endif
   template __global__ void 
-  #ifndef BOX
-  kernel_general
-  #else
-  kernel_general_box
+#ifndef BOX
+  #ifdef SMASYNC
+    kernel_general_async
+  #else 
+    kernel_general
   #endif
-  <TYPE,RTILE_Y,HALO,REG_FOLDER_Y,isUSESM>
+#else
+  #ifdef SMASYNC
+    kernel_general_box_async
+  #else 
+    kernel_general_box
+  #endif
+#endif
+  <TYPE,RTILE_Y,HALO,REG_FOLDER_Y,BLOCKTYPE,isUSESM>
   (TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int, int);
 #endif

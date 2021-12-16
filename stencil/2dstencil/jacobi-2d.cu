@@ -115,18 +115,18 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #ifdef GEN
   #ifndef BOX
   auto execute_kernel = async?
-          (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
-          kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+          (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+          kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           :
-          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
-            kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>);
+          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
   #else
   auto execute_kernel = async?
-          (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
-            kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+          (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
             :
-          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,true>:
-            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,false>)
+          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           ;
   #endif
   //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;

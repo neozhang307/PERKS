@@ -48,10 +48,10 @@ def parseptx(contents, funcname):
 
 import subprocess
 
-def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,box):
-    basicstring="nvcc -std=c++11 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256,REG_FOLDER_Y={3}{4}{5}{6} ./jacobi-general.cu"
+def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,box,btype):
+    basicstring="nvcc -std=c++14 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256,REG_FOLDER_Y={3}{4}{5}{6} -DBLOCKTYPE={7} ./jacobi-general.cu"
 
-    generated_string=basicstring.format(archstring,halostring,realstring,regfolderstring,useSM,asyncSM,box)
+    generated_string=basicstring.format(archstring,halostring,realstring,regfolderstring,useSM,asyncSM,box,btype)
     # print(generated_string)
 
     sub = subprocess.Popen(generated_string, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -61,13 +61,13 @@ def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,bo
 import sys
 
 
-def singletask(filename,halostring,realstring,useSM,box,archstring,asyncSM):
+def singletask(filename,halostring,realstring,useSM,box,archstring,asyncSM,btype):
     regfolder=0
     file = open(filename, 'a')
     original_out=sys.stdout
     while (True):
     # for regfolder in range(3):
-        subprocess_return = compile(archstring,halostring,regfolder,realstring,useSM,asyncSM,box)
+        subprocess_return = compile(archstring,halostring,regfolder,realstring,useSM,asyncSM,box,btype)
         print(subprocess_return)
         returnlist =parseptx(subprocess_return.splitlines(), "general")
         spillnum=int(returnlist[6])+int(returnlist[7])
@@ -78,20 +78,24 @@ def singletask(filename,halostring,realstring,useSM,box,archstring,asyncSM):
 
         regfolder+=1
         # break
-        if spillnum!=0:
+        if spillnum>=128:
             break
 
-def HuseSM(filename,halostring,realstring,box,archstring,asyncSM):
-        singletask(filename,halostring,realstring,"",box,archstring,asyncSM)
-        singletask(filename,halostring,realstring,",USESM",box,archstring,asyncSM)
+def HuseSM(filename,halostring,realstring,box,archstring,asyncSM,btype):
+        singletask(filename,halostring,realstring,"",box,archstring,asyncSM,btype)
+        singletask(filename,halostring,realstring,",USESM",box,archstring,asyncSM,btype)
 
-def HuseSMreal(filename,halostring,box,archstring,asyncSM):
-    HuseSM(filename,halostring,"float",box,archstring,asyncSM)
-    HuseSM(filename,halostring,"double",box,archstring,asyncSM)
+def HuseSMreal(filename,halostring,box,archstring,asyncSM,btype):
+    HuseSM(filename,halostring,"float",box,archstring,asyncSM,btype)
+    HuseSM(filename,halostring,"double",box,archstring,asyncSM,btype)
 
-def Hrange(filename,halostart,haloend,box,archstring,asyncSM):
+def Hrange(filename,halostart,haloend,box,archstring,asyncSM,btype):
     for i in range(halostart,haloend+1):
-        HuseSMreal(filename,i,box,archstring,asyncSM)
+        HuseSMreal(filename,i,box,archstring,asyncSM,btype)
+
+def blockTYPE(filename,halostart,haloend,box,archstring,asyncSM):
+    Hrange(filename,halostart,haloend,box,archstring,asyncSM,1)
+    Hrange(filename,halostart,haloend,box,archstring,asyncSM,2)
 
 def HuseSMrealbox(halostring,archstring,asyncSM):
     HuseSMreal(halostring,"",archstring,asyncSM)
@@ -116,10 +120,21 @@ halostring=1
 # HuseSMrealboxArch(1)
 # print("star")
 
-Hrange("star_80.log",1,6,"","arch=compute_80,code=sm_80","")
-Hrange("star_80_async.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM")
-Hrange("star_70.log",1,6,"","arch=compute_70,code=sm_70","")
 
-Hrange("box_80.log",1,2,",BOX","arch=compute_80,code=sm_80","")
-Hrange("box_80_async.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM")
-Hrange("box_70.log",1,2,",BOX","arch=compute_70,code=sm_70","")
+
+# Hrange("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2)
+# Hrange("star_80_async_128.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",2)
+# Hrange("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2)
+
+Hrange("box_80_128.log",1,2,",BOX","arch=compute_80,code=sm_80","",2)
+# Hrange("box_80_async_128.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",2)
+# Hrange("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2)
+
+
+# Hrange("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1)
+# Hrange("star_80_async_256.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",1)
+# Hrange("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1)
+
+# Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1)
+# Hrange("box_80_async_256.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",1)
+# Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1)
