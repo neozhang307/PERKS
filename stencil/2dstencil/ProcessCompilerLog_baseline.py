@@ -49,8 +49,8 @@ def parseptx(contents, funcname):
 import subprocess
 
 def compile(archstring, halostring, realstring,asyncSM,box):
-    basicstring="nvcc -std=c++11 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256{3}{4} ./jacobi-baseline.cu"
-    basicstring="nvcc --std=c++11 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,PERSISTENT,HALO={1},TYPE={2},RTILE_Y=8,TILE_X=256{3}{4} ./jacobi-baseline.cu"
+    basicstring="nvcc -std=c++14 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y=8,RTILE_X=256{3}{4} ./jacobi-baseline.cu"
+    # basicstring="nvcc --std=c++14 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,PERSISTENT,HALO={1},TYPE={2},RTILE_Y=8,TILE_X=256{3}{4} ./jacobi-baseline.cu"
     generated_string=basicstring.format(archstring,halostring,realstring,asyncSM,box)
     sub = subprocess.Popen(generated_string, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return sub.stdout.read()

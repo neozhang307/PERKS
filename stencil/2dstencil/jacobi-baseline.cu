@@ -210,13 +210,13 @@ __global__ void
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
-          template __global__ void kernel_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__);
       #endif
     #else
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
-          template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__ );
       #endif
     #endif
   #else
@@ -224,13 +224,13 @@ __global__ void
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
-          template __global__ void kernel_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__);
       #endif
     #else 
       #ifdef PERSISTENT
           template __global__ void kernel_persistent_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
       #else
-          template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__ );
       #endif    
     #endif
   #endif

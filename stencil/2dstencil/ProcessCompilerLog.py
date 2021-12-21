@@ -122,19 +122,19 @@ halostring=1
 
 
 
-# Hrange("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2)
-# Hrange("star_80_async_128.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",2)
-# Hrange("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2)
+Hrange("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2)
+Hrange("star_80_async_128.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",2)
+Hrange("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2)
 
 Hrange("box_80_128.log",1,2,",BOX","arch=compute_80,code=sm_80","",2)
-# Hrange("box_80_async_128.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",2)
-# Hrange("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2)
+Hrange("box_80_async_128.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",2)
+Hrange("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2)
 
 
-# Hrange("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1)
-# Hrange("star_80_async_256.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",1)
-# Hrange("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1)
+Hrange("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1)
+Hrange("star_80_async_256.log",1,6,"","arch=compute_80,code=sm_80",",ASYNCSM",1)
+Hrange("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1)
 
-# Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1)
-# Hrange("box_80_async_256.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",1)
-# Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1)
+Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1)
+Hrange("box_80_async_256.log",1,2,",BOX","arch=compute_80,code=sm_80",",ASYNCSM",1)
+Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1)
