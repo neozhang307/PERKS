@@ -23,7 +23,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/temp.sh ${CMAKE_CURRENT_BINARY_DIR}/temp.sh COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/iteratedomain.sh ${CMAKE_CURRENT_BINARY_DIR}/iteratedomain.sh COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/iteratebaseline_cm.sh ${CMAKE_CURRENT_BINARY_DIR}/iteratebaseline_cm.sh COPYONLY)
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/iteratefiles.sh ${CMAKE_CURRENT_BINARY_DIR}/iteratefiles.sh COPYONLY)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ProcessDomaindata.py ${CMAKE_CURRENT_BINARY_DIR}/ProcessDomaindata.py COPYONLY)
 
 add_subdirectory(js2d5pt)
 add_subdirectory(js2d9pt)
