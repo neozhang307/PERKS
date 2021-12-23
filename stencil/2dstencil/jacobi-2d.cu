@@ -330,7 +330,10 @@ else
 #endif
 
 #ifdef GENWR
-  auto execute_kernel = 
+  auto execute_kernel =
+   // noregcache?(
+                    // useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,0,true>:
+                    // kernel_general_wrapper<REAL,RTILE_Y,HALO,0,false>):
                 (blkpsm>=2?
                 (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
                     kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
@@ -574,7 +577,11 @@ size_t executeSM = 0;
   float elapsedTime;
   cudaEventElapsedTime(&elapsedTime,_forma_timer_start_,_forma_timer_stop_);
   #ifdef __PRINT__
-    printf("%f\t%f\n",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ (elapsedTime/RUNS)/1000/1000);
+    printf("%f\t%f\t",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ (elapsedTime/RUNS)/1000/1000);
+    #if defined(GEN) || defined(GENWR)
+    printf("%d\t%d\t%d\t%d",REG_FOLDER_Y,max_sm_flder,(int)bdimx*grid_dim.x,(int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
+    #endif
+    printf("\n");
   #else
     printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime/RUNS);
     printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*(width_y)*(width_x)/ elapsedTime/1000/1000*RUNS);
