@@ -26,6 +26,11 @@ void printdiff(REAL* out, REAL* ref, int widthx, int widthy)
   }
 }
 
+#ifdef REFCHECK
+#define CPUCODE
+#endif
+
+
 #include "./common/cub_utils.cuh"
 
 int main(int argc, char  *argv[])
@@ -33,7 +38,7 @@ int main(int argc, char  *argv[])
   int width_x; 
   int width_y;
   int iteration=3;
-  width_x=width_y=4096;//4096;
+  width_x=width_y=2048;//4096;
   bool fp32=true;//float
   bool check=false;
   int bdimx=256;
@@ -41,18 +46,17 @@ int main(int argc, char  *argv[])
   bool async=false;
   bool useSM=false;
 
+  bool checkmindomain=false;
+
   if (argc >= 3) {
     width_y = atoi(argv[1]);
     width_x = atoi(argv[2]);
     width_x = width_x==0?2048:width_x;
     width_y = width_y==0?2048:width_y;
-    // if(argc>=4)
-    // {
-    //   iteration=atoi(argv[3]);
-    // }
   }
 
   CommandLineArgs args(argc, argv);
+  checkmindomain = args.CheckCmdLineFlag("checkmindomain");
   fp32 = args.CheckCmdLineFlag("fp32");
   async = args.CheckCmdLineFlag("async");
   check = args.CheckCmdLineFlag("check");
@@ -63,7 +67,31 @@ int main(int argc, char  *argv[])
   args.GetCmdLineArgument("blkpsm", blkpsm);
   if(bdimx==0)bdimx=256;
   if(iteration==0)iteration=3;
-
+#ifndef CPUCODE
+  if(checkmindomain)
+  {
+    if(fp32)
+    {
+      printf("2048 %d\n",getMinWidthY<float>(2048,bdimx));
+    }
+    else
+    {
+      printf("2048 %d\n",getMinWidthY<double>(2048,bdimx));
+    }
+    return 0;
+  }
+  int registers=256;
+  if(blkpsm==2)registers=128;
+  if(blkpsm==1)registers=256;
+  if(fp32)
+  {
+    printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM));
+  }
+  else
+  {
+    printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM));
+  }
+#endif
 #ifdef REFCHECK
   iteration=4;
 #endif
@@ -71,7 +99,6 @@ int main(int argc, char  *argv[])
   if(fp32)
   {
     #define REAL float
-    
     REAL (*input)[width_x] = (REAL (*)[width_x])
       getRandom2DArray<REAL>(width_y, width_x);
     REAL (*output)[width_x] = (REAL (*)[width_x])
@@ -89,7 +116,6 @@ int main(int argc, char  *argv[])
       }
     #endif
 
-    
     if(check!=0){
       int halo=HALO*iteration;
       double error =
@@ -120,7 +146,6 @@ int main(int argc, char  *argv[])
     #else
       jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM);
       
-  
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
@@ -133,11 +158,9 @@ int main(int argc, char  *argv[])
       int halo=HALO*iteration;
     #endif
     if(check!=0){
-      
       double error =
         checkError2D<REAL>
         (width_x, (REAL*)output, (REAL*) output_gold, halo, width_y-halo, halo, width_x-halo);
-      
       printf("[Test] RMS Error : %e\n",error);
       if (error > TOLERANCE)
         return -1;

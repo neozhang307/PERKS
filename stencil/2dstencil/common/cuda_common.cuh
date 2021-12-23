@@ -11,7 +11,7 @@
     #elif __CUDA_ARCH__==700
         #define PERKS_ARCH 700
     #elif __CUDA_ARCH__==600
-        #define  600
+        #define PERKS_ARCH 600
     #else
         #error "unsupport"
     #endif

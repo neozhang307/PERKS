@@ -25,13 +25,13 @@
 #if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
   #define TRADITIONLAUNCH
 #endif
-#if defined(GEN)||defined(PERSISTENT)
+#if defined(GEN)|| defined(GENWR) ||defined(PERSISTENT)
   #define PERSISTENTLAUNCH
 #endif
 #if defined PERSISTENTLAUNCH||defined(BASELINE_CM)
   #define PERSISTENTTHREAD
 #endif
-#if defined(BASELINE)||defined(BASELINE_CM)||defined(GEN)||defined(MIX)||defined(PERSISTENT)
+#if defined(BASELINE)||defined(BASELINE_CM)||defined(GEN)||defined(GENWR)||defined(PERSISTENT)
   #define USEMAXSM
 #endif
 
@@ -71,15 +71,213 @@ void host_printptx(int&result)
 #define RTILE_Y (8)
 #endif
 
+#include "perksconfig.cuh"
 
+template<int halo, bool isstar, int registeramount, int arch, bool useSM, class REAL>
+int getMinWidthY(int width_x, int bdimx)
+{
+  //firstly be able  to get the register info
+  int ptx;
+  host_printptx(ptx);
+
+  int smcount=0;
+  if(ptx==700)
+  {
+    smcount=80;
+  }
+  if(ptx==800)
+  {
+    smcount=108;
+  }
+  int registerfoler=0;
+  int max_sm_flder=0;
+  // int total_flder=0;
+  int blkpsm=256/registeramount;
+  {
+    {
+      
+      if(useSM)
+      {
+        registerfoler=regfolder<halo,isstar,registeramount,arch,true,REAL>::val;
+
+        int maxSharedMemory;
+        cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
+        int SharedMemoryUsed = maxSharedMemory-1024;
+
+        int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+        max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/blkpsm
+                              -2*HALO*isBOX
+                              -basic_sm_space
+                              -2*HALO*(registerfoler)*RTILE_Y
+                              -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+      }
+      else
+      {
+        registerfoler=regfolder<halo,isstar,registeramount,arch,false,REAL>::val;
+      }
+    }
+  }
+  int dimy=smcount*blkpsm/(width_x/bdimx);
+  return (registerfoler+max_sm_flder)*RTILE_Y*dimy;
+}
+template<class REAL>
+int getMinWidthY(int width_x, int bdimx, int registers, bool useSM)
+{
+  int ptx;
+  host_printptx(ptx);
+  if(ptx==800)
+  {
+    if(registers==128)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isBOX==1,128,800,true,REAL>(width_x,bdimx);
+      }
+      else
+      {
+        return getMinWidthY<HALO,isBOX==1,128,800,false,REAL>(width_x,bdimx);
+      }
+    }
+    if(registers==256)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isBOX==1,256,800,true,REAL>(width_x,bdimx);
+      }
+      else
+      {
+        return getMinWidthY<HALO,isBOX==1,256,800,false,REAL>(width_x,bdimx);
+      }
+    }
+  }
+
+  if(ptx==700)
+  {
+    if(registers==128)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isBOX==1,128,700,true,REAL>(width_x,bdimx);
+      }
+      else
+      {
+        return getMinWidthY<HALO,isBOX==1,128,700,false,REAL>(width_x,bdimx);
+      }
+    }
+    if(registers==256)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isBOX==1,256,700,true,REAL>(width_x,bdimx);
+      }
+      else
+      {
+        return getMinWidthY<HALO,isBOX==1,256,700,false,REAL>(width_x,bdimx);
+      }
+    }
+  }
+  return 0;
+}
+
+
+template<int halo, bool isstar, int arch, class REAL>
+int getMinWidthY(int width_x, int bdimx)
+{
+  int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL>(width_x,bdimx);
+  int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL>(width_x,bdimx);
+  int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL>(width_x,bdimx);
+  int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL>(width_x,bdimx);
+  int result = max(minwidthy1,minwidthy2);
+  // printf("%d,%d,%d,%d\n",minwidthy1,minwidthy2,minwidthy3,minwidthy4);
+  result = max(result,minwidthy3);
+  result = max(result,minwidthy4);
+  return result;
+}
+
+template<class REAL>
+int getMinWidthY(int width_x, int bdimx, int ptx)
+{
+  // int ptx;
+  // host_printptx(ptx);
+  if(ptx==800)
+  {
+    return getMinWidthY<HALO,isBOX==0,800, REAL>(width_x,bdimx);
+  }
+  if(ptx==700)
+  {
+    return getMinWidthY<HALO,isBOX==0,700, REAL>(width_x,bdimx);
+  }  
+  return 0;
+}
+
+template<class REAL>
+int getMinWidthY(int width_x, int bdimx)
+{
+  int ptx;
+  host_printptx(ptx);
+  if(ptx==800)
+  {
+    return getMinWidthY<HALO,isBOX==0,800, REAL>(width_x,bdimx);
+  }
+  if(ptx==700)
+  {
+    return getMinWidthY<HALO,isBOX==0,700, REAL>(width_x,bdimx);
+  }  
+  return 0;
+}
+
+template int getMinWidthY<float>(int, int, int, bool);
+template int getMinWidthY<double>(int, int, int, bool);
+template int getMinWidthY<float>(int,int);
+template int getMinWidthY<double>(int,int);
+
+
+// #ifdef GENWR
+// #define REG_FOLDER_Y (regfolder<HALO,isBOX==0,blkpsm>=2?128:256,ptx,useSM,REAL>::val);
+// #endif
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
 void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
+
   int ptx;
   host_printptx(ptx);
+  
+#ifdef GENWR
+int REG_FOLDER_Y=0;
+if(blkpsm>=2)
+{
+  if(useSM)
+  {
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,700,true,REAL>::val);
+  }
+  else
+  {
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,700,false,REAL>::val);
+  }
+}
+else
+{
+  if(useSM)
+  {
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,700,true,REAL>::val);
+  }
+  else
+  {
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,700,false,REAL>::val);
+  }
+}
+
+#endif
+
+
+
   #ifndef __PRINT__
     printf("code is run in %d\n",ptx);
   #endif
@@ -114,14 +312,14 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 #endif 
 #ifdef GEN
   #ifndef BOX
-  auto execute_kernel = async?
+    auto execute_kernel = async?
           (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
           kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           :
           (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
             kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
   #else
-  auto execute_kernel = async?
+    auto execute_kernel = async?
           (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
             kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
             :
@@ -129,11 +327,25 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
             kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           ;
   #endif
-  //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
 #endif
+
+#ifdef GENWR
+  auto execute_kernel = 
+                (blkpsm>=2?
+                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
+                    kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
+                :
+                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
+                    kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
+                ; 
+  // auto execute_kernel=kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>;
+#endif
+
+  //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
+
   int sm_count;
   cudaDeviceGetAttribute ( &sm_count, cudaDevAttrMultiProcessorCount,0 );
-  
+
   //initialization input and output space
   REAL * input;
   cudaMalloc(&input,sizeof(REAL)*((width_y-0)*(width_x-0)));
@@ -147,7 +359,7 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
   Check_CUDA_Error("Allocation Error!! : __var_2__\n");
 
   //initialize tmp space for halo region
-#if defined(GEN) || defined(MIX)|| defined(PERSISTENT)
+#if defined(GEN) || defined(GENWR)|| defined(PERSISTENT)
   REAL * L2_cache3;
   REAL * L2_cache4;
   size_t L2_utage_2 = sizeof(REAL)*(width_y)*2*(width_x/bdimx)*HALO;
@@ -171,8 +383,8 @@ void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__
 size_t executeSM = 0;
 #ifndef NAIVE
   //shared memory used for compuation
-  int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO);
-  size_t sharememory_basic=(1+basic_sm_space)*sizeof(REAL);
+  int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+  size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
 
 #endif
@@ -181,13 +393,15 @@ size_t executeSM = 0;
 
 
 #ifdef PERSISTENTTHREAD
-  int numBlocksPerSm_current=0;
+  int numBlocksPerSm_current=1000;
 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
-
+  cudaDeviceSynchronize();
+  cudaCheckError();
   #ifndef __PRINT__
-    printf("blk per sm is %d/%d\n", numBlocksPerSm_current,blkpsm);
+    // printf("");
+    printf("blk per sm is %d/%d %d in sm %f\n", numBlocksPerSm_current,blkpsm,bdimx,(double)executeSM/1024);
   #endif
   if(blkpsm!=0)
   {
@@ -211,23 +425,23 @@ size_t executeSM = 0;
   #endif
 
   #define halo HALO
-  #if defined(GEN) 
+  #if defined(GEN) || defined(GENWR)  
 
   size_t max_sm_flder=0;
-  if(useSM)
-  {
-    max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current
-                            -2*HALO*isBOX
-                            -basic_sm_space
-                            -2*HALO*(REG_FOLDER_Y)*RTILE_Y
-                            -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+  // if(useSM)
+  // {
+  max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current
+                          -2*HALO*isBOX
+                          -basic_sm_space
+                          -2*HALO*(REG_FOLDER_Y)*RTILE_Y
+                          -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+  if(!useSM)max_sm_flder=0;
 
-    // size_t sm_cache_size = TOTAL_SM_CACHE_SPACE*sizeof(REAL);
-    size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
-    size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
-    executeSM=sharememory_basic+y_axle_halo;
-    executeSM+=sm_cache_size;
-  }
+  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
+  size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+  executeSM=sharememory_basic+y_axle_halo;
+  executeSM+=sm_cache_size;
+
   #undef halo
 
   #ifndef __PRINT__
@@ -255,7 +469,7 @@ size_t executeSM = 0;
 //in order to get a better performance, warmup run is necessary.
 
 
-#if defined(GEN) || defined(PERSISTENT)
+#if defined(GEN)|| defined(GENWR) || defined(PERSISTENT)
   int l_iteration=iteration;
   void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
     (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
@@ -368,7 +582,7 @@ size_t executeSM = 0;
     printf("[FORMA] bandwidth(GB/s) : %lf\n", (REAL)sizeof(REAL)*iteration*((width_y)*(width_x)+width_x*width_y)/ elapsedTime/1000/1000*RUNS);
     printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
     printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
-    #if defined(GEN) || defined(MIX)
+    #if defined(GEN) || defined(GENWR)
       printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)bdimx*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
       printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
     #endif
@@ -387,7 +601,7 @@ size_t executeSM = 0;
 #endif
   cudaDeviceSynchronize();
   cudaCheckError();
-#if defined(GEN) || defined(PERSISTENT)
+#if defined(GEN) || defined(GENWR) || defined(PERSISTENT)
   if(iteration%2==1)
     cudaMemcpy(__var_0__,__var_2__, sizeof(REAL)*((width_y-0)*(width_x-0)), cudaMemcpyDeviceToHost);
   else
@@ -401,7 +615,7 @@ size_t executeSM = 0;
   cudaFree(__var_1__);
   cudaFree(__var_2__);
 
-#if defined(GEN) || defined(PERSISTENT)
+#if defined(GEN) || defined(GENWR)  || defined(PERSISTENT)
   cudaFree(L2_cache3);
 #endif
 
