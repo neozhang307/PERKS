@@ -105,11 +105,20 @@ int getMinWidthY(int width_x, int bdimx)
         int SharedMemoryUsed = maxSharedMemory-1024;
 
         int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
-        max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/blkpsm
-                              -2*HALO*isBOX
-                              -basic_sm_space
-                              -2*HALO*(registerfoler)*RTILE_Y
-                              -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+        // printf("%d\n",SharedMemoryUsed/sizeof(REAL)/blkpsm);
+        // printf("%d\n",2*HALO*isBOX);
+        // printf("%d\n",basic_sm_space);
+        // printf("%d\n",2*HALO*(registerfoler)*RTILE_Y);
+        // printf("%d\n",2*HALO*(bdimx+2*HALO));
+        int tmp0=SharedMemoryUsed/sizeof(REAL)/blkpsm;
+        int tmp1=2*HALO*isBOX;
+        int tmp2=basic_sm_space;
+        int tmp3=2*HALO*(registerfoler)*RTILE_Y;
+        int tmp4=2*HALO*(bdimx+2*HALO);
+        tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
+        tmp0=tmp0>0?tmp0:tmp0;
+        max_sm_flder=(tmp0)/(bdimx+4*HALO)/RTILE_Y;
+        // printf("%d,%d\n",registerfoler,max_sm_flder);
       }
       else
       {
@@ -131,22 +140,22 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isBOX==1,128,800,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,800,true,REAL>(width_x,bdimx);
       }
       else
       {
-        return getMinWidthY<HALO,isBOX==1,128,800,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,800,false,REAL>(width_x,bdimx);
       }
     }
     if(registers==256)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isBOX==1,256,800,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,800,true,REAL>(width_x,bdimx);
       }
       else
       {
-        return getMinWidthY<HALO,isBOX==1,256,800,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,800,false,REAL>(width_x,bdimx);
       }
     }
   }
@@ -157,22 +166,22 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isBOX==1,128,700,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,700,true,REAL>(width_x,bdimx);
       }
       else
       {
-        return getMinWidthY<HALO,isBOX==1,128,700,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,700,false,REAL>(width_x,bdimx);
       }
     }
     if(registers==256)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isBOX==1,256,700,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,700,true,REAL>(width_x,bdimx);
       }
       else
       {
-        return getMinWidthY<HALO,isBOX==1,256,700,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,700,false,REAL>(width_x,bdimx);
       }
     }
   }
@@ -201,11 +210,11 @@ int getMinWidthY(int width_x, int bdimx, int ptx)
   // host_printptx(ptx);
   if(ptx==800)
   {
-    return getMinWidthY<HALO,isBOX==0,800, REAL>(width_x,bdimx);
+    return getMinWidthY<HALO,isStar,800, REAL>(width_x,bdimx);
   }
   if(ptx==700)
   {
-    return getMinWidthY<HALO,isBOX==0,700, REAL>(width_x,bdimx);
+    return getMinWidthY<HALO,isStar,700, REAL>(width_x,bdimx);
   }  
   return 0;
 }
@@ -217,11 +226,11 @@ int getMinWidthY(int width_x, int bdimx)
   host_printptx(ptx);
   if(ptx==800)
   {
-    return getMinWidthY<HALO,isBOX==0,800, REAL>(width_x,bdimx);
+    return getMinWidthY<HALO,isStar,800, REAL>(width_x,bdimx);
   }
   if(ptx==700)
   {
-    return getMinWidthY<HALO,isBOX==0,700, REAL>(width_x,bdimx);
+    return getMinWidthY<HALO,isStar,700, REAL>(width_x,bdimx);
   }  
   return 0;
 }
@@ -251,26 +260,26 @@ if(blkpsm>=2)
 {
   if(useSM)
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,800,true,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,700,true,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,128,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,128,700,true,REAL>::val);
   }
   else
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,800,false,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,128,700,false,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,128,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,128,700,false,REAL>::val);
   }
 }
 else
 {
   if(useSM)
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,800,true,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,700,true,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,256,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,256,700,true,REAL>::val);
   }
   else
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,800,false,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isBOX==0,256,700,false,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,256,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,256,700,false,REAL>::val);
   }
 }
 

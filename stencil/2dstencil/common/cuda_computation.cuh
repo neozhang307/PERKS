@@ -27,6 +27,7 @@
   #define stencilParaInput  west,east,north,south,center
   #define R_PTR r_ptr[INPUTREG_SIZE]
   #define isBOX (0)
+  #define isStar (true)
 #else
   #if HALO==1
     #define stencilParaT \
@@ -50,6 +51,7 @@
   #define stencilParaInput  filter
   #define R_PTR r_ptr[2*halo+1][INPUTREG_SIZE]
   #define isBOX (halo)
+  #define isStar (false)
 #endif
 
 

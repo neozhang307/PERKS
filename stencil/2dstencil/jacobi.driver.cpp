@@ -83,6 +83,7 @@ int main(int argc, char  *argv[])
   int registers=256;
   if(blkpsm==2)registers=128;
   if(blkpsm==1)registers=256;
+#ifndef __PRINT__
   if(fp32)
   {
     printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM));
@@ -91,6 +92,7 @@ int main(int argc, char  *argv[])
   {
     printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM));
   }
+#endif
 #endif
 #ifdef REFCHECK
   iteration=4;
