@@ -38,15 +38,18 @@ int main(int argc, char  *argv[])
   int width_x; 
   int width_y;
   int iteration=3;
+  int warmupiteration=-1;
   width_x=width_y=2048;//4096;
   bool fp32=true;//float
   bool check=false;
   int bdimx=256;
   int blkpsm=0;
+
   bool async=false;
   bool useSM=false;
-
+  bool usewarmup=false;
   bool checkmindomain=false;
+  bool usesmall=false;
 
   if (argc >= 3) {
     width_y = atoi(argv[1]);
@@ -61,13 +64,32 @@ int main(int argc, char  *argv[])
   async = args.CheckCmdLineFlag("async");
   check = args.CheckCmdLineFlag("check");
   useSM = args.CheckCmdLineFlag("usesm");
+  usewarmup = args.CheckCmdLineFlag("warmup");
+  usesmall = args.CheckCmdLineFlag("small");
   // bdimx = args
   args.GetCmdLineArgument("bdim", bdimx);
   args.GetCmdLineArgument("iter", iteration);
+  args.GetCmdLineArgument("warmiter", warmupiteration);
   args.GetCmdLineArgument("blkpsm", blkpsm);
   if(bdimx==0)bdimx=256;
   if(iteration==0)iteration=3;
+
 #ifndef CPUCODE
+  if(usesmall)
+  {
+    int registers=256;
+    if(blkpsm==2)registers=128;
+    if(blkpsm==1)registers=256;
+    if(fp32)
+    {
+      width_y=getMinWidthY<float>(width_x,bdimx,registers,useSM);
+    }
+    else 
+    {
+      width_y=getMinWidthY<double>(width_x,bdimx,registers,useSM);
+    }
+  }
+
   if(checkmindomain)
   {
     if(fp32)
@@ -80,10 +102,13 @@ int main(int argc, char  *argv[])
     }
     return 0;
   }
+
+
+#ifndef __PRINT__
+  {
   int registers=256;
   if(blkpsm==2)registers=128;
   if(blkpsm==1)registers=256;
-#ifndef __PRINT__
   if(fp32)
   {
     printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM));
@@ -92,6 +117,7 @@ int main(int argc, char  *argv[])
   {
     printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM));
   }
+}
 #endif
 #endif
 #ifdef REFCHECK
@@ -111,7 +137,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM,usewarmup, warmupiteration);
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
@@ -146,7 +172,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM);
+      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM,usewarmup, warmupiteration);
       
       if(check!=0)
       {

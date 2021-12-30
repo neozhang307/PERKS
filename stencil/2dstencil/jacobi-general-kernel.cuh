@@ -145,7 +145,8 @@ __device__ __forceinline__ void inner_general
         if(UseSMCache)
         {
           //need to deal with boundary
-          global2sm<REAL,isBOX,true,true>(input,sm_space,
+          // global2sm<REAL,isBOX,true,true>(input,sm_space,
+          global2sm<REAL,isBOX,false,true>(input,sm_space,
                                       halo,
                                       p_y+total_reg_tile_y+total_sm_tile_y, width_y,
                                       p_x, width_x,
@@ -283,7 +284,8 @@ __device__ __forceinline__ void inner_general
     {
       //ALL information already loaded, 
       //theoretically can use information inside chip instead of loading from global memory. 
-      global2sm<REAL,halo,ISINITI>(input, sm_rbuffer, 
+      // global2sm<REAL,halo,ISINITI>(input, sm_rbuffer, 
+      global2sm<REAL,halo,false>(input, sm_rbuffer, 
                                             halo*2,
                                             p_y_cache_end-halo, width_y,
                                             p_x, width_x,
@@ -292,7 +294,8 @@ __device__ __forceinline__ void inner_general
     }
     else if(UseRegCache)
     {
-      global2sm<REAL,halo,ISINITI,SYNC>(input, sm_rbuffer, 
+      // global2sm<REAL,halo,ISINITI,SYNC>(input, sm_rbuffer, 
+      global2sm<REAL,halo,false,SYNC>(input, sm_rbuffer, 
                                             halo,
                                             p_y_cache_end, width_y,
                                             p_x, width_x,

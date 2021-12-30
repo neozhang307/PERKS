@@ -43,6 +43,7 @@ registerlimits=[128,256]
 import sys
 file = open("perksconfig.cuh", 'w')
 sys.stdout = file
+print("#pragma once")
 print("template<int halo, bool isstar, int registeramount, int arch, bool useSM, class REAL>")
 print("struct regfolder")
 print("{")

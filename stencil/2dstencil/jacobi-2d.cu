@@ -35,9 +35,9 @@
   #define USEMAXSM
 #endif
 
-#ifdef __PRINT__ 
-  #define WARMUPRUN
-#endif
+// #ifdef __PRINT__ 
+//   #define WARMUPRUN
+// #endif
 
 #ifndef RUNS
   #define RUNS (1)
@@ -235,10 +235,10 @@ int getMinWidthY(int width_x, int bdimx)
   return 0;
 }
 
-template int getMinWidthY<float>(int, int, int, bool);
-template int getMinWidthY<double>(int, int, int, bool);
-template int getMinWidthY<float>(int,int);
-template int getMinWidthY<double>(int,int);
+template int getMinWidthY<float>  (int, int, int, bool);
+template int getMinWidthY<double> (int, int, int, bool);
+template int getMinWidthY<float>  (int, int);
+template int getMinWidthY<double> (int, int);
 
 
 // #ifdef GENWR
@@ -247,7 +247,7 @@ template int getMinWidthY<double>(int,int);
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM){
+void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM, bool usewarmup, int warmupiteration){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
 
@@ -480,18 +480,24 @@ size_t executeSM = 0;
 #endif
 //in order to get a better performance, warmup run is necessary.
 
+// #ifdef WARMUPRUN
 
+  int l_warmupiteration=warmupiteration>0?warmupiteration:1000;
+  // printf("%d\n",l_warmupiteration);
+// #endif
 #if defined(GEN)|| defined(GENWR) || defined(PERSISTENT)
   int l_iteration=iteration;
   void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
     (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
     (void*)&l_iteration, (void*)&max_sm_flder};
-  #ifdef WARMUPRUN
-    int warmupiteration=1;
+  // #ifdef WARMUPRUN
+    
     void* KernelArgs_NULL[] ={(void**)&__var_2__,(void**)&width_y,
       (void*)&width_x,(void*)&__var_1__,(void*)&L2_cache3,(void*)&L2_cache4,
-      (void*)&warmupiteration, (void *)&max_sm_flder};
-  #endif
+      (void*)&l_warmupiteration, (void *)&max_sm_flder};
+
+    
+  // #endif
 #endif
 
 //@LINGQI: l2 cache setting not show performance difference. 
@@ -510,23 +516,42 @@ size_t executeSM = 0;
     // cudaStreamSynchronize(0);
 #endif
 
-#ifdef WARMUPRUN
-      cudaCheckError();
-  #ifdef TRADITIONLAUNCH
-      execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-            (__var_2__, width_y, width_x,__var_1__);
-  #endif 
-
-  #ifdef PERSISTENTLAUNCH
-      cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
-  #endif
-
-#endif 
-
 #ifdef _TIMER_
   cudaEvent_t _forma_timer_start_,_forma_timer_stop_;
   cudaEventCreate(&_forma_timer_start_);
   cudaEventCreate(&_forma_timer_stop_);
+#endif 
+
+// #ifdef WARMUPRUN
+
+if(usewarmup){
+  cudaCheckError();
+  #ifdef TRADITIONLAUNCH
+      for(int out=0; out<10; out++)
+      {
+        for(int i=0; i<l_warmupiteration; i++)
+        {
+          execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+                (__var_2__, width_y, width_x , __var_1__);
+          REAL* tmp = __var_2__;
+          __var_2__=__var_1__;
+          __var_1__= tmp;
+        }       
+      }
+
+  #endif 
+
+  #ifdef PERSISTENTLAUNCH
+      for(int i=0; i<10; i++)
+      {
+        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
+      }
+  #endif
+}
+// #endif 
+
+
+#ifdef _TIMER_
   cudaEventRecord(_forma_timer_start_,0);
 #endif
 
