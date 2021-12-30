@@ -74,7 +74,7 @@ void host_printptx(int&result)
 #include "perksconfig.cuh"
 
 template<int halo, bool isstar, int registeramount, int arch, bool useSM, class REAL>
-int getMinWidthY(int width_x, int bdimx)
+int getMinWidthY(int width_x, int bdimx, int blkpsm)
 {
   //firstly be able  to get the register info
   int ptx;
@@ -92,7 +92,7 @@ int getMinWidthY(int width_x, int bdimx)
   int registerfoler=0;
   int max_sm_flder=0;
   // int total_flder=0;
-  int blkpsm=256/registeramount;
+  // int blkpsm=256/registeramount;
   {
     {
       
@@ -130,58 +130,151 @@ int getMinWidthY(int width_x, int bdimx)
   return (registerfoler+max_sm_flder)*RTILE_Y*dimy;
 }
 template<class REAL>
-int getMinWidthY(int width_x, int bdimx, int registers, bool useSM)
+int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm)
 {
   int ptx;
   host_printptx(ptx);
+
+#ifdef GEN
+  registers=0;
+#endif
+  if(blkpsm<=0)
+  {
+#if defined(PERSISTENT)
+
+  #ifndef BOX
+  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+  #else
+  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+  #endif
+#endif
+#if defined(BASELINE_CM)||defined(BASELINE)
+  #ifndef BOX
+    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
+  #else
+    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
+  #endif
+#endif
+#ifdef NAIVE
+  #ifndef BOX
+    auto execute_kernel = kernel2d_restrict<REAL,HALO>;
+  #else
+    auto execute_kernel = kernel2d_restrict_box<REAL,HALO>;
+  #endif
+#endif 
+#ifdef GEN
+  #ifndef BOX
+    auto execute_kernel = 
+          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
+  #else
+    auto execute_kernel = 
+          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+          ;
+  #endif
+#endif
+
+#ifdef GENWR
+  auto execute_kernel =
+   // noregcache?(
+                    // useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,0,true>:
+                    // kernel_general_wrapper<REAL,RTILE_Y,HALO,0,false>):
+                (blkpsm>=2?
+                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
+                    kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
+                :
+                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
+                    kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
+                ; 
+  // auto execute_kernel=kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>;
+#endif
+    int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+    size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
+    size_t executeSM = sharememory_basic;
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &blkpsm, execute_kernel, bdimx, executeSM);
+    // blkpsm=1;
+  }
+
+
+
+  // if(registers!=0)
+  // {
+  //   blkpsm=256/registers;
+  // }
   if(ptx==800)
   {
+    if(registers==0)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isStar,0,800,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return 0;
+        // return getMinWidthY<HALO,isStar,0,800,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
     if(registers==128)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isStar,128,800,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,800,true,REAL>(width_x,bdimx,blkpsm);
       }
       else
       {
-        return getMinWidthY<HALO,isStar,128,800,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,800,false,REAL>(width_x,bdimx,blkpsm);
       }
     }
     if(registers==256)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isStar,256,800,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,800,true,REAL>(width_x,bdimx,blkpsm);
       }
       else
       {
-        return getMinWidthY<HALO,isStar,256,800,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,800,false,REAL>(width_x,bdimx,blkpsm);
       }
     }
   }
 
   if(ptx==700)
   {
+    if(registers==0)
+    {
+      if(useSM)
+      {
+        return getMinWidthY<HALO,isStar,0,700,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return 0;
+        // return getMinWidthY<HALO,isStar,0,700,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
     if(registers==128)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isStar,128,700,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,700,true,REAL>(width_x,bdimx,blkpsm);
       }
       else
       {
-        return getMinWidthY<HALO,isStar,128,700,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,128,700,false,REAL>(width_x,bdimx,blkpsm);
       }
     }
     if(registers==256)
     {
       if(useSM)
       {
-        return getMinWidthY<HALO,isStar,256,700,true,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,700,true,REAL>(width_x,bdimx,blkpsm);
       }
       else
       {
-        return getMinWidthY<HALO,isStar,256,700,false,REAL>(width_x,bdimx);
+        return getMinWidthY<HALO,isStar,256,700,false,REAL>(width_x,bdimx,blkpsm);
       }
     }
   }
@@ -192,10 +285,11 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM)
 template<int halo, bool isstar, int arch, class REAL>
 int getMinWidthY(int width_x, int bdimx)
 {
-  int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL>(width_x,bdimx);
-  int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL>(width_x,bdimx);
-  int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL>(width_x,bdimx);
-  int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL>(width_x,bdimx);
+  int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL>(width_x,bdimx,2);
+  int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL>(width_x,bdimx,1);
+  int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL>(width_x,bdimx,2);
+  int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL>(width_x,bdimx,1);
+
   int result = max(minwidthy1,minwidthy2);
   // printf("%d,%d,%d,%d\n",minwidthy1,minwidthy2,minwidthy3,minwidthy4);
   result = max(result,minwidthy3);
@@ -235,8 +329,8 @@ int getMinWidthY(int width_x, int bdimx)
   return 0;
 }
 
-template int getMinWidthY<float>  (int, int, int, bool);
-template int getMinWidthY<double> (int, int, int, bool);
+template int getMinWidthY<float>  (int, int, int, bool,int);
+template int getMinWidthY<double> (int, int, int, bool,int);
 template int getMinWidthY<float>  (int, int);
 template int getMinWidthY<double> (int, int);
 

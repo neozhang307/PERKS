@@ -21,11 +21,13 @@ rununit()
 	for((i=0; i<${TEST}; i++))
 	do
 		waittilltemp60c
-		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=0 ${FLOATTYPE} ${CHECK} >> ./${FILE}
-		waittilltemp60c
 		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=2 ${FLOATTYPE} ${CHECK} >> ./${FILE}
 		waittilltemp60c
 		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=1 ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=2 --usesm ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=1 --usesm ${FLOATTYPE} ${CHECK} >> ./${FILE}
 	done
 }
 runtest()
@@ -50,7 +52,7 @@ runtest()
 
 }
 
-prefix=baseline
+# prefix=baseline
 
 ITER=3
 FLOATTYPE="--fp32"
@@ -61,9 +63,10 @@ source ./domain.sh
 
 
 
-FILEPREFIX="baseline_cm"
-executable="*baseline_cm.exe"
-
+FILEPREFIX="genwr"
+executable="*genwr.exe"
+LOGFILE="log"
+# mkdir ${LOG}
 
 export ITER=3
 export BDIM=256
@@ -88,6 +91,7 @@ done
 
 
 export ITER=1000
+# export ITER=1
 export BDIM=256
 export TEST=2
 CHECK=""

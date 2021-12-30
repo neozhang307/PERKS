@@ -17,14 +17,14 @@ acuratethreashold=0.85
 aiml2cache=l2cache_a100
 aimdataunit=dataunit_fp32
 
-def parsebaselinelog(filename,dataunit,l2cache):
+def parsebaselinelog(filename,dataunit,minsize):
 	df_none = pd.read_csv(filename,  header=None, delimiter='\t')
 
 	# print(rslt_df[rslt_df['2']=1])
 	rslt_df = df_none.loc[(df_none[2]==useasync)&(df_none[6]==aimdblk)]
 	pd.options.mode.chained_assignment = None  
-	rslt_df["size"] = rslt_df.loc[:,3] * rslt_df.loc[:,4]*dataunit/1024/1024*2
-	rslt_df = rslt_df.loc[rslt_df["size"]>l2cache
+	rslt_df["size"] = rslt_df.loc[:,3] * rslt_df.loc[:,4]*dataunit/1024/1024
+	rslt_df = rslt_df.loc[rslt_df["size"]>minsize
 ]
 	peakperf = rslt_df[11].max()
 	# print(peakperf)
@@ -53,8 +53,12 @@ for larch in archs:
 
 		newfilenname="./baseline_{}_{}.log".format(ltype,larch)
 		# print(newfilenname)
-		rst=parsebaselinelog(newfilenname,aimdataunit,aiml2cache)
-		# print(rst)
+
+		domaininfor = pd.read_csv("mindomain_{}_{}.log".format(ltype,larch),  header=None, delimiter=' ')
+		domainsize=domaininfor[0][0]*domaininfor[1][0]*aimdataunit/1024/1024
+		domainsize=max(domainsize,aiml2cache/2)
+		rst=parsebaselinelog(newfilenname,aimdataunit,domainsize)
+		# # print(rst)
 		print("export {}_{}_x={}".format(ltype,larch,rst[0]))
 		print("export {}_{}_y={}".format(ltype,larch,rst[1]))
 

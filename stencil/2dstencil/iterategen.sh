@@ -26,6 +26,12 @@ rununit()
 		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=2 ${FLOATTYPE} ${CHECK} >> ./${FILE}
 		waittilltemp60c
 		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=1 ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=0 --usesm ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=2 --usesm ${FLOATTYPE} ${CHECK} >> ./${FILE}
+		waittilltemp60c
+		./${executable} $WIDTH $HEIGHT --warmup --iter=${ITER} --bdim=${BDIM} --blkpsm=1 --usesm ${FLOATTYPE} ${CHECK} >> ./${FILE}
 	done
 }
 runtest()
@@ -50,7 +56,7 @@ runtest()
 
 }
 
-prefix=baseline
+# prefix=baseline
 
 ITER=3
 FLOATTYPE="--fp32"
@@ -61,8 +67,8 @@ source ./domain.sh
 
 
 
-FILEPREFIX="baseline_cm"
-executable="*baseline_cm.exe"
+FILEPREFIX="gen"
+executable="*gen.exe"
 
 
 export ITER=3
@@ -88,6 +94,7 @@ done
 
 
 export ITER=1000
+# export ITER=1
 export BDIM=256
 export TEST=2
 CHECK=""

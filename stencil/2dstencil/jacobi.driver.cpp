@@ -80,14 +80,21 @@ int main(int argc, char  *argv[])
     int registers=256;
     if(blkpsm==2)registers=128;
     if(blkpsm==1)registers=256;
+    // printf("hrere");
     if(fp32)
     {
-      width_y=getMinWidthY<float>(width_x,bdimx,registers,useSM);
+      width_y=getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm);
     }
     else 
     {
-      width_y=getMinWidthY<double>(width_x,bdimx,registers,useSM);
+      width_y=getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm);
     }
+    if(width_y==0)
+    {
+      printf("error unsupport no cache version small code\n");
+      return 0;
+    }
+    // printf("widis %d\n",width_y);
   }
 
   if(checkmindomain)
@@ -109,13 +116,17 @@ int main(int argc, char  *argv[])
   int registers=256;
   if(blkpsm==2)registers=128;
   if(blkpsm==1)registers=256;
+  // #ifdef GEN
+  // registers=0;
+  // printf("0\n");
+  // #endif
   if(fp32)
   {
-    printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM));
+    printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm));
   }
   else
   {
-    printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM));
+    printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm));
   }
 }
 #endif
