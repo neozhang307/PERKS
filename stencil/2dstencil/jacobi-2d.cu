@@ -589,20 +589,82 @@ size_t executeSM = 0;
   int l_warmupiteration=warmupiteration>0?warmupiteration:1000;
   // printf("%d\n",l_warmupiteration);
 // #endif
+
 #if defined(GEN)|| defined(GENWR) || defined(PERSISTENT)
-  int l_iteration=iteration;
-  void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
-    (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
-    (void*)&l_iteration, (void*)&max_sm_flder};
-  // #ifdef WARMUPRUN
-    
     void* KernelArgs_NULL[] ={(void**)&__var_2__,(void**)&width_y,
       (void*)&width_x,(void*)&__var_1__,(void*)&L2_cache3,(void*)&L2_cache4,
       (void*)&l_warmupiteration, (void *)&max_sm_flder};
-
     
   // #endif
 #endif
+
+if(usewarmup){
+  // cudaCheckError();
+
+  // cudaEventRecord(warstart,0);
+  cudaEvent_t warstart,warmstop;
+  cudaEventCreate(&warstart);
+  cudaEventCreate(&warmstop);
+  #ifdef TRADITIONLAUNCH
+  {
+
+
+      cudaEventRecord(warstart,0);
+      for(int i=0; i<l_warmupiteration; i++)
+      {
+        execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+              (__var_2__, width_y, width_x , __var_1__);
+        REAL* tmp = __var_2__;
+        __var_2__=__var_1__;
+        __var_1__= tmp;
+      } 
+      cudaEventRecord(warmstop,0);
+      cudaEventSynchronize(warmstop);
+      float warmelapsedTime;
+      cudaEventElapsedTime(&warmelapsedTime,warstart,warmstop);
+      int nowwarmup=warmelapsedTime;
+      int nowiter=(350+nowwarmup-1)/nowwarmup;
+
+      for(int out=0; out<nowiter; out++)
+      {
+        for(int i=0; i<l_warmupiteration; i++)
+        {
+          execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+                (__var_2__, width_y, width_x , __var_1__);
+          REAL* tmp = __var_2__;
+          __var_2__=__var_1__;
+          __var_1__= tmp;
+        }       
+      }
+  }
+  #endif 
+  
+  #ifdef PERSISTENTLAUNCH
+  {
+      // double accumulate=0;
+      cudaEventRecord(warstart,0);
+      cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
+      cudaEventRecord(warmstop,0);
+      cudaEventSynchronize(warmstop);
+      float warmelapsedTime;
+      cudaEventElapsedTime(&warmelapsedTime,warstart,warmstop);
+      int nowwarmup=warmelapsedTime;
+      int nowiter=(350+nowwarmup-1)/nowwarmup;
+      for(int i=0; i<nowiter; i++)
+      {
+        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
+      }
+  }
+  #endif
+  // cudaEventRecord(warmstop,0);
+
+  // float warmelapsedTime;
+  // cudaEventElapsedTime(&warmelapsedTime,warstart,warmstop);
+  // printf("run times %f\n",warmelapsedTime);
+
+}
+// printf("herer");
+
 
 //@LINGQI: l2 cache setting not show performance difference. 
 #if defined(GEN) && defined(L2PER)
@@ -620,6 +682,13 @@ size_t executeSM = 0;
     // cudaStreamSynchronize(0);
 #endif
 
+#if defined(GEN)|| defined(GENWR) || defined(PERSISTENT)
+  int l_iteration=iteration;
+  void* ExecuteKernelArgs[] ={(void**)&input,(void**)&width_y,
+    (void*)&width_x,(void*)&__var_2__,(void*)&L2_cache3,(void*)&L2_cache4,
+    (void*)&l_iteration, (void*)&max_sm_flder};
+#endif
+
 #ifdef _TIMER_
   cudaEvent_t _forma_timer_start_,_forma_timer_stop_;
   cudaEventCreate(&_forma_timer_start_);
@@ -628,30 +697,7 @@ size_t executeSM = 0;
 
 // #ifdef WARMUPRUN
 
-if(usewarmup){
-  cudaCheckError();
-  #ifdef TRADITIONLAUNCH
-      for(int out=0; out<10; out++)
-      {
-        for(int i=0; i<l_warmupiteration; i++)
-        {
-          execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-                (__var_2__, width_y, width_x , __var_1__);
-          REAL* tmp = __var_2__;
-          __var_2__=__var_1__;
-          __var_1__= tmp;
-        }       
-      }
 
-  #endif 
-
-  #ifdef PERSISTENTLAUNCH
-      for(int i=0; i<10; i++)
-      {
-        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
-      }
-  #endif
-}
 // #endif 
 
 
