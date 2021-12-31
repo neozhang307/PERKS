@@ -493,8 +493,10 @@ size_t executeSM = 0;
   size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
   {
-    #if defined(GEN)||defined(GENWR)
+    #if defined(GEN) || defined(GENWR)  
+    #define halo HALO
     executeSM +=  (HALO*2*(( REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+    #undef halo
     #endif
   }
 #endif
