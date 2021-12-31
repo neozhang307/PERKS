@@ -78,8 +78,11 @@ int main(int argc, char  *argv[])
   if(usesmall)
   {
     int registers=256;
-    if(blkpsm==2)registers=128;
-    if(blkpsm==1)registers=256;
+    if(blkpsm==2)
+      registers=128;
+    // if(blkpsm==1)
+    else
+      registers=256;
     // printf("hrere");
     if(fp32)
     {
@@ -91,7 +94,10 @@ int main(int argc, char  *argv[])
     }
     if(width_y==0)
     {
-      printf("error unsupport no cache version small code\n");
+      if(check)
+      {
+        printf("error unsupport no cache version small code\n");
+      }
       return 0;
     }
     // printf("widis %d\n",width_y);
@@ -148,7 +154,12 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM,usewarmup, warmupiteration);
+      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM,usewarmup, warmupiteration);
+      if(err==1)
+      {
+        if(check)printf("unsupport setting, no free space for cache with shared memory\n");
+        check=0;
+      }
       if(check!=0)
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
@@ -183,9 +194,13 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM,usewarmup, warmupiteration);
-      
-      if(check!=0)
+      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM,usewarmup, warmupiteration);
+      if(err==1)
+      {
+        if(check)printf("unsupport setting, no free space for cache with shared memory\n");
+        check=0;
+      }
+      if(check!=0)//not a feasible setting
       {
         jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
       }

@@ -116,7 +116,7 @@ int getMinWidthY(int width_x, int bdimx, int blkpsm)
         int tmp3=2*HALO*(registerfoler)*RTILE_Y;
         int tmp4=2*HALO*(bdimx+2*HALO);
         tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
-        tmp0=tmp0>0?tmp0:tmp0;
+        tmp0=tmp0>0?tmp0:0;
         max_sm_flder=(tmp0)/(bdimx+4*HALO)/RTILE_Y;
         // printf("%d,%d\n",registerfoler,max_sm_flder);
       }
@@ -341,7 +341,7 @@ template int getMinWidthY<double> (int, int);
 
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM, bool usewarmup, int warmupiteration){
+int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM, bool usewarmup, int warmupiteration){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
 
@@ -388,7 +388,7 @@ else
   if(ptx<800&&async==true)
   {
     printf("error async not support\n");//lower ptw not support 
-    return;
+    return -1;
   }
 //initialization
 #if defined(PERSISTENT)
@@ -492,10 +492,12 @@ size_t executeSM = 0;
   int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
   size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
-
+  {
+    #if defined(GEN)||defined(GENWR)
+    executeSM +=  (HALO*2*(( REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+    #endif
+  }
 #endif
-
-
 
 
 #ifdef PERSISTENTTHREAD
@@ -509,8 +511,11 @@ size_t executeSM = 0;
     // printf("");
     printf("blk per sm is %d/%d %d in sm %f\n", numBlocksPerSm_current,blkpsm,bdimx,(double)executeSM/1024);
   #endif
+  // int smbound=SharedMemoryUsed/executeSM;
+  // printf("%d,%d,%d\n",numBlocksPerSm_current,blkpsm,smbound);
   if(blkpsm!=0)
   {
+    
     numBlocksPerSm_current=min(numBlocksPerSm_current,blkpsm);
   }
   dim3 block_dim(bdimx);
@@ -534,16 +539,19 @@ size_t executeSM = 0;
   #if defined(GEN) || defined(GENWR)  
 
   size_t max_sm_flder=0;
-  // if(useSM)
-  // {
-  max_sm_flder=(SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current
-                          -2*HALO*isBOX
-                          -basic_sm_space
-                          -2*HALO*(REG_FOLDER_Y)*RTILE_Y
-                          -2*HALO*(bdimx+2*HALO))/(bdimx+4*HALO)/RTILE_Y;
+  int tmp0=SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current;
+  int tmp1=2*HALO*isBOX;
+  int tmp2=basic_sm_space;
+  int tmp3=2*HALO*(REG_FOLDER_Y)*RTILE_Y;
+  int tmp4=2*HALO*(bdimx+2*HALO);
+  tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
+  tmp0=tmp0>0?tmp0:0;
+  max_sm_flder=(tmp0)/(bdimx+4*HALO)/RTILE_Y;
+  // printf("smflder is %d\n",max_sm_flder);
   if(!useSM)max_sm_flder=0;
+  if(useSM&&max_sm_flder==0)return 1;
 
-  size_t sm_cache_size = (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
+  size_t sm_cache_size =max_sm_flder==0?0: (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
   size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
@@ -753,7 +761,7 @@ if(usewarmup){
 #if defined(GEN) || defined(GENWR)  || defined(PERSISTENT)
   cudaFree(L2_cache3);
 #endif
-
+  return 0;
 }
 
 PERKS_INITIALIZE_ALL_TYPE(PERKS_DECLARE_INITIONIZATION_ITERATIVE);
