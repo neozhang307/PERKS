@@ -138,7 +138,7 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm)
 #ifdef GEN
   registers=0;
 #endif
-  if(blkpsm<=0)
+  if(blkpsm<=0||registers==0)
   {
 #if defined(PERSISTENT)
 
@@ -192,8 +192,11 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm)
     int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
     size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
     size_t executeSM = sharememory_basic;
+    int getblkpsm=100;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &blkpsm, execute_kernel, bdimx, executeSM);
+        &getblkpsm, execute_kernel, bdimx, executeSM);
+    if(blkpsm<=0)blkpsm=getblkpsm;
+    else blkpsm=min(blkpsm,getblkpsm);
     // blkpsm=1;
   }
 
@@ -513,8 +516,8 @@ size_t executeSM = 0;
     // printf("");
     printf("blk per sm is %d/%d %d in sm %f\n", numBlocksPerSm_current,blkpsm,bdimx,(double)executeSM/1024);
   #endif
-  // int smbound=SharedMemoryUsed/executeSM;
-  // printf("%d,%d,%d\n",numBlocksPerSm_current,blkpsm,smbound);
+  int smbound=SharedMemoryUsed/executeSM;
+  printf("%d,%d,%d\n",numBlocksPerSm_current,blkpsm,smbound);
   if(blkpsm!=0)
   {
     

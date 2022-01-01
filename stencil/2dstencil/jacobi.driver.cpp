@@ -78,7 +78,7 @@ int main(int argc, char  *argv[])
   if(usesmall)
   {
     int registers=256;
-    if(blkpsm==2)
+    if(blkpsm>=2)
       registers=128;
     // if(blkpsm==1)
     else
