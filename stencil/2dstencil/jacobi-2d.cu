@@ -138,7 +138,7 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm)
 #ifdef GEN
   registers=0;
 #endif
-  if(blkpsm<=0||registers==0)
+  if(blkpsm!=1||registers==0)
   {
 #if defined(PERSISTENT)
 
