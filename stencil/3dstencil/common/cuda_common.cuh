@@ -1,4 +1,5 @@
-// #include "cuda.h"
+// #include "cuda.h
+#pragma once
 #include "stdio.h"
 
 #ifndef CUDACOMMON
@@ -25,6 +26,8 @@
   #include <cooperative_groups/memcpy_async.h>
   #include <cuda_pipeline.h>
 #endif
+
+
 
 extern __host__ __device__ __forceinline__ int MAX(int a, int b) { return a > b ? a : b; }
 extern __host__ __device__ __forceinline__ int MIN(int a, int b) { return a < b ? a : b; }
@@ -217,6 +220,40 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
   #undef dst_ind
 }
 
+template<class REAL, int halo, int BASE_Z, int SIZE_Z, int SMSIZE, int SM_BASE=0, bool isInit=false, bool sync=true>
+__device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[SMSIZE],
+                                          int gbase_x, int gbase_y, int gbase_z,
+                                          int width_x, int width_y, int width_z,
+                                          int sm_width_x, int sm_base_x,
+                                          int size_y, int sm_base_y, int ind_y,
+                                          int tile_x, int tid_x)
+{
+  _Pragma("unroll")
+  for(int l_z=0; l_z<SIZE_Z; l_z++)
+  {
+    int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
+        l_global_z = (MIN(l_global_z,width_x-1));
+    _Pragma("unroll")
+    for(int l_y=0; l_y<size_y; l_y+=1)
+    {
+      int l_global_y = (MIN(gbase_y+l_y+ind_y,width_y-1));
+        l_global_y = (MAX(l_global_y,0));
+        smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + (tid_x-halo) + sm_base_x]=
+            src[l_global_z*width_x*width_y+l_global_y*width_x+
+            MAX((gbase_x+tid_x-halo),0)];
+      if(tid_x<halo*2)
+      {
+          smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + tid_x + tile_x-halo+sm_base_x]=
+              src[l_global_z*width_x*width_y+l_global_y*width_x+
+                MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
+      }
+    }
+  }
+  if(sync)
+  {
+    __syncthreads();
+  }
+}
 __device__ void __forceinline__ pipesync()
 {
   #ifdef ASYNCSM

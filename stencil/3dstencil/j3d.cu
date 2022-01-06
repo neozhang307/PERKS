@@ -19,8 +19,21 @@
 #include "./common/cuda_common.cuh"
 #include "./common/cuda_computation.cuh"
 
-#define TILE_X 256
-#define NAIVE
+// #define TILE_X 256
+// #define NAIVE
+#if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_MEMWARP)
+  #define TRADITIONLAUNCH
+#endif
+#if defined(GEN)|| defined(GENWR) ||defined(PERSISTENT)
+  #define PERSISTENTLAUNCH
+#endif
+#if defined PERSISTENTLAUNCH||defined(BASELINE_MEMWARP)
+  #define PERSISTENTTHREAD
+#endif
+#if defined(BASELINE)||defined(BASELINE_MEMWARP)||defined(GEN)||defined(GENWR)||defined(PERSISTENT)
+  #define USEMAXSM
+#endif
+
 
 #define cudaCheckError() {                                          \
  cudaError_t e=cudaGetLastError();                                 \
@@ -44,40 +57,53 @@ void host_printptx(int&result)
   cudaDeviceSynchronize();
 }
 
-
+// template<class REAL, int halo>
+// __global__ void kernel3d_baseline(REAL *  input, 
+//                                 REAL *  output, 
+//                                 int width_z, int width_y, int width_x) 
+// {
+//   printf("??");
+// }
 template<class REAL>
 void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * __var_0__, int iteration){
   // int iteration=4;
 /* Host allocation Begin */
   int sm_count;
   cudaDeviceGetAttribute ( &sm_count, cudaDevAttrMultiProcessorCount,0 );
-#ifndef __PRINT__
+// #ifndef __PRINT__
   printf("sm_count is %d\n",sm_count);
-#endif
+// #endif
 
-#ifndef NAIVE
-    int sharememory0=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+2*HALO)+1)*sizeof(REAL);
-    #ifndef __PRINT__
-        printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
-    #endif
+  int ptx;
+  host_printptx(ptx);
+  printf("code is run in %d\n",ptx);
+#ifdef NAIVE
+  auto execute_kernel = kernel3d_restrict<REAL,HALO>;
+#endif 
+#ifdef BASELINE
+  auto execute_kernel = kernel3d_baseline<REAL,HALO>;
 #endif
+#ifdef BASELINE_MEMWARP
+  auto execute_kernel = kernel3d_baseline_memwarp<REAL,HALO>;
+#endif
+//shared memory related 
+size_t executeSM=0;
+#ifndef NAIVE
+    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+2*HALO)+1)*sizeof(REAL);
+    executeSM=basic_sm_space;
+#endif
+printf("sm is %ld\n",executeSM);
 #if defined(GEN) || defined(MIX)
-    int sharememory1 = sharememory0+2*BD_STEP_XY*FOLDER_Z*sizeof(REAL);
+    int sharememory1 = basic_sm_space+2*BD_STEP_XY*FOLDER_Z*sizeof(REAL);
     int sharememory2 = sharememory1 + sizeof(REAL) * (SFOLDER_Z)*(TILE_Y*2-1)*TILE_X;
 #endif
 
   REAL * input;
   cudaMalloc(&input,sizeof(REAL)*(height*width_x*width_y));
   Check_CUDA_Error("Allocation Error!! : input\n");
-  // cudaPointerAttributes ptrAttrib_h_input;
-  // cudaMemcpyKind memcpy_kind_h_input = cudaMemcpyHostToDevice;
-  // if (cudaPointerGetAttributes(&ptrAttrib_h_input, h_input) == cudaSuccess)
-    // if (ptrAttrib_h_input.memoryType == cudaMemoryTypeDevice)
-      // memcpy_kind_h_input = cudaMemcpyDeviceToDevice;
+
   cudaGetLastError();
-  // if( memcpy_kind_h_input != cudaMemcpyDeviceToDevice ){
   cudaMemcpy(input,h_input,sizeof(REAL)*(height*width_x*width_y), cudaMemcpyHostToDevice);
-  // }
   REAL * __var_1__;
   cudaMalloc(&__var_1__,sizeof(REAL)*(height*width_x*width_y));
   Check_CUDA_Error("Allocation Error!! : __var_1__\n");
@@ -85,39 +111,44 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
   cudaMalloc(&__var_2__,sizeof(REAL)*(height*width_x*width_y));
   Check_CUDA_Error("Allocation Error!! : __var_2__\n");
 
-#ifndef NAIVE
+#ifdef USEMAXSM
   int maxSharedMemory;
   cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
   int SharedMemoryUsed=maxSharedMemory-1024;
-  #ifndef __PRINT__  
-    printf("MAX shared memory is %f KB but only use %f KB\n",maxSharedMemory/1024.0,SharedMemoryUsed/1024.0);
-  #endif
-#endif
-
-#ifdef PERSISTENT
-    cudaFuncSetAttribute(kernel_persistent_iterative, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-#endif
-#ifdef GEN
-    // cudaFuncSetAttribute(kernel_persistent_iterative_register, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-    cudaFuncSetAttribute(kernel_persistent_iterative_gen, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-#endif
-#ifdef BASEPER
-    cudaFuncSetAttribute(kernel_persistent, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-#endif
-#ifdef BASELINE
-    cudaFuncSetAttribute(kernel_baseline_2, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-#endif
-
+  cudaFuncSetAttribute(execute_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
+#endif 
 
 /*Host Allocation End */
 /* Kernel Launch Begin */
+// #ifndef
+
 #ifdef NAIVE
-  dim3 block_dim_1(TILE_X, 4, 1);
-  dim3 grid_dim_1(width_x/TILE_X, width_y/4, height);
+  dim3 block_dim_1(bdimx, 4, 1);
+  dim3 grid_dim_1(width_x/bdimx, width_y/4, height);
+
+  dim3 executeBlockDim=block_dim_1;
+  dim3 executeGridDim=grid_dim_1;
+
 #endif
 #ifdef BASELINE
-  dim3 block_dim2(TILE_X, 1, 1);
-  dim3 grid_dim2(width_x/TILE_X, width_y/TILE_Y,  (sm_count*8*1024/TILE_X)/(width_x/TILE_X)/(width_y/TILE_Y));
+  dim3 block_dim_2(bdimx, 1, 1);
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y));
+  // dim3 block_dim3(TILE_X, 1, 1);
+  // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
+  
+  printf("<%d,%d,%d>",grid_dim_2.x,grid_dim_2.y,grid_dim_2.z);
+  dim3 executeBlockDim=block_dim_2;
+  dim3 executeGridDim=grid_dim_2;
+#endif
+#ifdef BASELINE_MEMWARP
+  dim3 block_dim_2(bdimx+2*TILE_X, 1, 1);
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y,   max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y));
+  // dim3 block_dim3(TILE_X, 1, 1);
+  // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
+  
+  printf("<%d,%d,%d>",grid_dim_2.x,grid_dim_2.y,grid_dim_2.z);
+  dim3 executeBlockDim=block_dim_2;
+  dim3 executeGridDim=grid_dim_2;
 #endif
 #if defined(GEN) || defined(PERSISTENT)||defined(BASEPER) 
   int numBlocksPerSm_current=0;
@@ -144,15 +175,9 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
   #endif
 
   dim3 block_dim3(TILE_X, 1, 1);
-  // dim3 grid_dim3(GDIM_X, 1, GDIM_Z);
-  // numBlocksPerSm_current=MIN(2,numBlocksPerSm_current);
   dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
-  #ifndef __PRINT__
-    printf("blk/sm is %d\n",numBlocksPerSm_current);
-  #endif
+
 #endif
-  cudaDeviceSynchronize();
-  cudaCheckError();
 
 
   size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2 ;
@@ -171,118 +196,42 @@ int l_iteration=iteration;
 void* KernelArgs0[] ={(void**)&input,(void*)&__var_2__,
     (void**)&height,(void**)&width_y,(void*)&width_x,
     (void*)&l_iteration};
-#ifdef __PRINT__  
-void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
-    (void**)&height,(void**)&width_y,(void*)&width_x,
-    (void*)&l_iteration};
-#endif
+  #ifdef __PRINT__  
+  void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
+      (void**)&height,(void**)&width_y,(void*)&width_x,
+      (void*)&l_iteration};
+  #endif
 #endif
 #ifdef GEN
   void* KernelArgs1[] ={(void**)&input,(void*)&__var_2__,
     (void**)&height,(void**)&width_y,(void*)&width_x,
     (void**)&L2_cache,(void**)&L2_cache1,
     (void*)&l_iteration};
-#ifdef __PRINT__  
-  void* KernelArgs1NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
-    (void**)&height,(void**)&width_y,(void*)&width_x,
-    (void**)&L2_cache,(void**)&L2_cache1,
-    (void*)&l_iteration};
-#endif 
-#endif
-#ifndef __PRINT__
-  // printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
-#ifndef NAIVE
-  printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
-#endif
-#if defined(GEN) || defined(MIX)
-  printf("shared memroy size (add boundary) is %f KB\n",(REAL)sharememory1/1024);
-  printf("shared memroy size when use shared memory to cache(add boundary) is %f KB\n",(REAL)sharememory2/1024);
-#endif
-#endif
-#ifdef __PRINT__
-  #ifdef NAIVE
-    printf("naive\t");
+  #ifdef __PRINT__  
+    void* KernelArgs1NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
+      (void**)&height,(void**)&width_y,(void*)&width_x,
+      (void**)&L2_cache,(void**)&L2_cache1,
+      (void*)&l_iteration};
   #endif 
-  #ifdef BASELINE
-    #ifndef DA100X
-      printf("bsln\t");
-    #else
-      printf("asyncbsln\t");
-    #endif
-  #endif 
-  #ifdef PERSISTENT
-    #ifndef DA100X
-      printf("psstnt\t");
-    #else
-      printf("asyncpsstnt\t");
-    #endif
-  #endif 
-  #ifdef GEN
-    #ifndef DA100X
-      printf("gen"); 
-    #else
-      printf("asyncgen"); 
-    #endif
-    #if RFOLDER_Z==0 && SFOLDER_Z ==0
-      printf("\t");
-    #endif
-    #if RFOLDER_Z==0 && SFOLDER_Z !=0
-      printf("_sm\t");
-    #endif
-    #if RFOLDER_Z!=0 && SFOLDER_Z ==0
-      printf("_reg\t");
-    #endif
-    #if RFOLDER_Z!=0 && SFOLDER_Z !=0
-      printf("_mix\t");
-    #endif
-  #endif
-  #ifdef BASEPER
-    #ifndef DA100X
-      printf("psbsln\t");
-    #else
-      printf("asyncpsbsln\t");
-    #endif
-  #endif
-  printf("%d\t%d\t%d\t%d\t",height,width_y,width_x,iteration); 
-  #ifdef NAIVE
-    printf("(%d,%d,%d)\t",TILE_X,4,1); 
-    printf("(%d,%d,%d)\t%d\t0\t0\t",grid_dim_1.x, grid_dim_1.y, grid_dim_1.z ,grid_dim_1.x*grid_dim_1.y*grid_dim_1.z/sm_count,grid_dim_1.x*grid_dim_1.y*grid_dim_1.z/sm_count);
-      kernel3d_restrict<REAL,HALO><<<grid_dim_1, block_dim_1>>>
+#endif
+// #ifndef __PRINT__
+//   // printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
+//   #ifndef NAIVE
+//     printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
+//   #endif
+//   #if defined(GEN) || defined(MIX)
+//     printf("shared memroy size (add boundary) is %f KB\n",(REAL)sharememory1/1024);
+//     printf("shared memroy size when use shared memory to cache(add boundary) is %f KB\n",(REAL)sharememory2/1024);
+//   #endif
+// #endif
+bool warmup=false;
+if(warmup)
+{
+  #ifdef TRADITIONLAUNCH
+    execute_kernel<<<executeGridDim, executeGridDim, executeSM>>>
             (__var_2__, __var_1__,  height, width_y, width_x);
-  #endif 
-  #ifdef BASELINE
-    printf("(%d,%d,%d)\t",TILE_X,1,1); 
-    printf("(%d,%d,%d)\t%d\t0\t0\t",grid_dim2.x, grid_dim2.y, grid_dim2.z, grid_dim2.x*grid_dim2.y*grid_dim2.z/sm_count ,grid_dim2.x*grid_dim2.y*grid_dim2.z/sm_count);
-       kernel_baseline_2<<<grid_dim2, block_dim2, sharememory0>>>
-          (input, __var_2__, height, width_y, width_x);
-  #endif 
-  #ifdef BASEPER
-    printf("(%d,%d,%d)\t",TILE_X,1,1); 
-    printf("(%d,%d,%d)\t%d\t0\t0\t",grid_dim3.x, grid_dim3.y, grid_dim3.z ,grid_dim3.x*grid_dim3.y*grid_dim3.z/sm_count ,grid_dim3.x*grid_dim3.y*grid_dim3.z/sm_count);
-
-    kernel_persistent<<<grid_dim3, block_dim3, sharememory0>>>
-          (input, __var_2__, height, width_y, width_x);
   #endif
-  #ifdef PERSISTENT
-    printf("(%d,%d,%d)\t",TILE_X,1,1 );
-    printf("(%d,%d,%d)\t%d\t0\t0\t",grid_dim3.x, grid_dim3.y, grid_dim3.z ,grid_dim3.x*grid_dim3.y*grid_dim3.z/sm_count);
-
-    cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative, grid_dim3, block_dim3, KernelArgs0NULL, sharememory0,0);
-  #endif 
-  #ifdef GEN
-    printf("(%d,%d,%d)\t",TILE_X,1,1);
-    printf("(%d,%d,%d)\t%d\t%d\t%d\t",grid_dim3.x, grid_dim3.y, grid_dim3.z,grid_dim3.x*grid_dim3.y*grid_dim3.z/sm_count,RFOLDER_Z,SFOLDER_Z);
-    if(SFOLDER_Z==0)
-    {
-      cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1NULL, sharememory1,0);
-    }
-    else
-    {
-      cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1NULL, sharememory2,0);
-    }
-  #endif
-#endif
-
+}
 
 #ifdef _TIMER_
   cudaEvent_t _forma_timer_start_,_forma_timer_stop_;
@@ -293,28 +242,6 @@ void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
 
 // #define PERSISTENT
   
-#ifdef BASELINE 
-#ifndef __PRINT__
-  printf("baseline is executed\n");
-#endif
-  cudaDeviceSynchronize();
-  cudaCheckError();
-  kernel_baseline_2<<<grid_dim2, block_dim2, sharememory0>>>
-          (input, __var_2__, height, width_y, width_x);
-
-  for(int i=1; i<iteration; i++)
-  {
-     kernel_baseline_2<<<grid_dim2, block_dim2, sharememory0>>>
-          (__var_2__, __var_1__, height, width_y, width_x);
-    REAL* tmp = __var_2__;
-    __var_2__=__var_1__;
-    __var_1__= tmp;
-  }
-
-  cudaDeviceSynchronize();
-  cudaCheckError();
-#endif
-
 
   // // int sharememroy1 = sharememory0+(TILE_Y)
 #ifdef BASEPER
@@ -360,28 +287,26 @@ void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
 
 #endif
 
-
-
-#ifdef NAIVE
-// //naive
-
-  kernel3d_restrict<REAL,HALO><<<grid_dim_1, block_dim_1>>>
+  cudaDeviceSynchronize();
+  cudaCheckError();
+#ifdef TRADITIONLAUNCH
+  // dim3 executeBlockDim=block_dim_1;
+  // dim3 executeGridDim=grid_dim_1;
+  execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
           (input, __var_2__,  height, width_y, width_x);
-
+  cudaDeviceSynchronize();
+  cudaCheckError();
   for(int i=1; i<iteration; i++)
   {
-     kernel3d_restrict<REAL,HALO><<<grid_dim_1, block_dim_1>>>
+     execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
           (__var_2__, __var_1__, height, width_y, width_x);
     REAL* tmp = __var_2__;
     __var_2__=__var_1__;
     __var_1__= tmp;
   }
+#endif
 
-#endif
-#ifdef CHECK
-  cudaDeviceSynchronize();
-  cudaCheckError();
-#endif
+
 #ifdef _TIMER_
   cudaEventRecord(_forma_timer_stop_,0);
   cudaEventSynchronize(_forma_timer_stop_);
@@ -399,7 +324,7 @@ void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
   // printf("%d\t%d\t",TILE_X,1); 
   // printf("%d\t%d\t%d\t",width_x/TILE_X, width_y/TILE_Y, 5); 
   printf("%f\t%lf\n",elapsedTime,(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000); 
-  printf("");
+  // printf("");
 #endif
   cudaEventDestroy(_forma_timer_start_);
   cudaEventDestroy(_forma_timer_stop_);

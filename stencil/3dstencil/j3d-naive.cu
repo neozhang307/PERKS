@@ -106,5 +106,9 @@ __global__ void kernel3d_restrict(REAL* input, REAL* output,
     return;
 }
 
+
+
 template __global__ void kernel3d_restrict<float,HALO>(float* input, float* output,
                                   int height, int width_y, int width_x);
+template __global__ void kernel3d_restrict<double,HALO>(double* input, double* output,
+                                  int height, int width_y, int width_x);                                 
