@@ -31,7 +31,6 @@ kernel3d_persistent(REAL * __restrict__ input,
                                 int iteration) 
 #endif
 {
-  // printf("?");
   const int tile_x_with_halo=TILE_X+2*halo;
   const int tile_y_with_halo=TILE_Y+2*halo;
   stencilParaT;
@@ -40,8 +39,7 @@ kernel3d_persistent(REAL * __restrict__ input,
   REAL* sm_rbuffer = (REAL*)sm+1;
 
   register REAL r_smbuffer[2*halo+1][ITEM_PER_THREAD];
-  // printf("%d\n",ITEM_PER_THREAD);
-  // return;
+ 
   REAL* smbuffer_buffer_ptr[halo+1];
   smbuffer_buffer_ptr[0]=sm_rbuffer;
   #pragma unroll
@@ -61,18 +59,14 @@ kernel3d_persistent(REAL * __restrict__ input,
 
   const int cpbase_y = -halo+tid_y*cpblocksize_y+(tid_y<=cpquotion_y?tid_y:cpquotion_y);
   const int cpend_y = cpbase_y + cpblocksize_y + (tid_y<=cpquotion_y?1:0);
-  // if(tid_x==0&&blockIdx.x==0)
-  //   printf("<%d,%d,%d,%d,%d,%d>",cpbase_y,cpend_y,cpblocksize_y,dim_y,tid_y,ITEM_PER_THREAD);
-  // return;
+
   const int ps_y = halo;
   const int ps_x = halo;
   // const int ps_z = halo;
 
   const int p_x = blockIdx.x * TILE_X;
   const int p_y = blockIdx.y * TILE_Y;
-  // if(blockIdx.x==0&&tid_x==0)
-  //   printf("<%d,%d,%d:%d,%d>",ps_x,ps_y,ps_z,tid_x,tid_y);
-  // return;
+
   int blocksize_z=(width_z/gridDim.z);
   int z_quotient = width_z%gridDim.z;
 
@@ -163,10 +157,6 @@ kernel3d_persistent(REAL * __restrict__ input,
     }
     #ifdef PERSISTENT
       if(iter>=iteration-1)break;
-      // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0&&blockDim.x==0)
-      // {
-      //   printf("%d\n",iter);
-      // }
       gg.sync();
 
       REAL* tmp_ptr =output;
