@@ -15,11 +15,21 @@
   #include <cuda_pipeline.h>
 #endif
 
+namespace cg = cooperative_groups;
 
 template<class REAL, int halo>
-__global__ void kernel3d_baseline(REAL * __restrict__ input, 
+__global__ void 
+#ifndef PERSISTENT
+kernel3d_baseline(REAL * __restrict__ input, 
                                 REAL * __restrict__ output, 
                                 int width_z, int width_y, int width_x) 
+#else
+kernel3d_persistent(REAL * __restrict__ input, 
+                                REAL * __restrict__ output, 
+                                int width_z, int width_y, int width_x,
+                                REAL* l2_cache_i, REAL* l2_cache_o,
+                                int iteration) 
+#endif
 {
   // printf("?");
   const int tile_x_with_halo=TILE_X+2*halo;
@@ -71,7 +81,10 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
   const int p_z_end = p_z + (blocksize_z);
  
   // int smz_ind=0;
-
+#ifdef PERSISTENT  
+  cg::grid_group gg = cg::this_grid();
+  for(int iter=0; iter<iteration; iter++)
+#endif
   {
     global2regs3d<REAL, ITEM_PER_THREAD, 1+2*halo>
       (input, r_smbuffer, p_z-halo,width_z, p_y+index_y, width_y, p_x, width_x,tid_x);
@@ -148,11 +161,29 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
       regsself3d<REAL,2*halo+1,ITEM_PER_THREAD>(r_smbuffer);
 
     }
+    #ifdef PERSISTENT
+      if(iter>=iteration-1)break;
+      // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0&&blockDim.x==0)
+      // {
+      //   printf("%d\n",iter);
+      // }
+      gg.sync();
+
+      REAL* tmp_ptr =output;
+      output=input;
+      input=tmp_ptr;
+    #endif
   }
 }
 
 
-template __global__ void kernel3d_baseline<float,HALO> 
-    (float *__restrict__, float *__restrict__ , int , int , int );
-template __global__ void kernel3d_baseline<double,HALO> 
-    (double *__restrict__, double *__restrict__ , int , int , int );
+// template __global__ void kernel3d_baseline<float,HALO> 
+//     (float *__restrict__, float *__restrict__ , int , int , int );
+// template __global__ void kernel3d_baseline<double,HALO> 
+//     (double *__restrict__, double *__restrict__ , int , int , int );
+
+#ifndef PERSISTENT 
+  PERKS_INITIALIZE_ALL_TYPE_1ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO);
+#else
+  PERKS_INITIALIZE_ALL_TYPE_1ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO);
+#endif

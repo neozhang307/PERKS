@@ -24,11 +24,11 @@
 #define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
 // (32)
 
-#define RTILE_Z (1)
+// #define RTILE_Z (1)
 
-#ifndef X_FACTOR
-#define X_FACTOR (16)
-#endif
+// #ifndef X_FACTOR
+// #define X_FACTOR (16)
+// #endif
 // #ifndef RFOLDER_Z
 // #define RFOLDER_Z (3)
 // #endif
@@ -211,3 +211,12 @@ __global__ void kernel3d_baseline_memwarp(REAL* __restrict__ input, REAL*__restr
                                   int height, int width_y, int width_x); 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE_MEMWARP(_type,halo) \
     __global__ void kernel3d_baseline_memwarp<_type,halo>(_type*__restrict__,_type*__restrict__,int,int,int);
+
+
+template<class REAL, int halo>
+__global__ void kernel3d_persistent(REAL* __restrict__ input, REAL*__restrict__ output,
+                                  int height, int width_y, int width_x, 
+                                  REAL * l2_cache_i, REAL * l2_cache_o, 
+                                  int iteration); 
+#define PERKS_DECLARE_INITIONIZATION_PERSISTENT(_type,halo) \
+    __global__ void kernel3d_persistent<_type,halo>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int);

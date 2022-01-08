@@ -86,6 +86,10 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
 #ifdef BASELINE_MEMWARP
   auto execute_kernel = kernel3d_baseline_memwarp<REAL,HALO>;
 #endif
+#ifdef PERSISTENT
+  auto execute_kernel = kernel3d_persistent<REAL,HALO>;
+#endif
+
 //shared memory related 
 size_t executeSM=0;
 #ifndef NAIVE
@@ -136,7 +140,6 @@ printf("sm is %ld\n",executeSM);
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
   
-  printf("<%d,%d,%d>",grid_dim_2.x,grid_dim_2.y,grid_dim_2.z);
   dim3 executeBlockDim=block_dim_2;
   dim3 executeGridDim=grid_dim_2;
 #endif
@@ -161,43 +164,45 @@ printf("sm is %ld\n",executeSM);
   dim3 executeBlockDim=block_dim_3;
   dim3 executeGridDim=grid_dim_3;
 
+  printf("plckpersm is %d\n", numBlocksPerSm_current);
 #endif
 
+  printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
 
   size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2 ;
 #ifndef __PRINT__
   printf("l2 cache used is %ld KB : 4096 KB \n",L2_utage/1024);
 #endif
-  REAL * L2_cache;
-  REAL * L2_cache1;
-  cudaMalloc(&L2_cache,L2_utage);
-  cudaMalloc(&L2_cache1,L2_utage);
+  REAL * l2_cache1;
+  REAL * l2_cache2;
+  cudaMalloc(&l2_cache1,L2_utage);
+  cudaMalloc(&l2_cache2,L2_utage);
    
-#if defined(GEN) || defined(MIX)||defined(PERSISTENT) 
-int l_iteration=iteration;
-#endif
-#ifdef PERSISTENT
-void* KernelArgs0[] ={(void**)&input,(void*)&__var_2__,
+#ifdef PERSISTENTLAUNCH
+  int l_iteration=iteration;
+  void* KernelArgs[] ={(void**)&input,(void*)&__var_2__,
     (void**)&height,(void**)&width_y,(void*)&width_x,
+    (void**)&l2_cache1, (void**)&l2_cache2,
     (void*)&l_iteration};
-  #ifdef __PRINT__  
-  void* KernelArgs0NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
+  // #ifdef __PRINT__  
+  void* KernelArgsNULL[] ={(void**)&__var_2__,(void*)&__var_1__,
       (void**)&height,(void**)&width_y,(void*)&width_x,
+      (void**)&l2_cache1, (void**)&l2_cache2,
       (void*)&l_iteration};
-  #endif
+  // #endif
 #endif
-#ifdef GEN
-  void* KernelArgs1[] ={(void**)&input,(void*)&__var_2__,
-    (void**)&height,(void**)&width_y,(void*)&width_x,
-    (void**)&L2_cache,(void**)&L2_cache1,
-    (void*)&l_iteration};
-  #ifdef __PRINT__  
-    void* KernelArgs1NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
-      (void**)&height,(void**)&width_y,(void*)&width_x,
-      (void**)&L2_cache,(void**)&L2_cache1,
-      (void*)&l_iteration};
-  #endif 
-#endif
+// #ifdef GEN
+//   void* KernelArgs1[] ={(void**)&input,(void*)&__var_2__,
+//     (void**)&height,(void**)&width_y,(void*)&width_x,
+//     (void**)&L2_cache,(void**)&L2_cache1,
+//     (void*)&l_iteration};
+//   #ifdef __PRINT__  
+//     void* KernelArgs1NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
+//       (void**)&height,(void**)&width_y,(void*)&width_x,
+//       (void**)&L2_cache,(void**)&L2_cache1,
+//       (void*)&l_iteration};
+//   #endif 
+// #endif
 // #ifndef __PRINT__
 //   // printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
 //   #ifndef NAIVE
@@ -215,6 +220,9 @@ if(warmup)
     execute_kernel<<<executeGridDim, executeGridDim, executeSM>>>
             (__var_2__, __var_1__,  height, width_y, width_x);
   #endif
+#ifdef PERSISTENTLAUNCH
+  cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
+#endif
 }
 
 #ifdef _TIMER_
@@ -229,30 +237,28 @@ if(warmup)
   //persistent kernel
 // #define GEN
 
-#ifdef PERSISTENT
-  cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative, grid_dim3, block_dim3, KernelArgs0, sharememory0,0);
-#endif
+
   //cached persistent kernel
 
-#ifdef GEN
+// #ifdef GEN
 
-  // cudaFuncSetAttribute(kernel_persistent_iterative_register, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
-  // cudaFuncSetAttribute(kernel_persistent_iterative_gen, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
+//   // cudaFuncSetAttribute(kernel_persistent_iterative_register, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
+//   // cudaFuncSetAttribute(kernel_persistent_iterative_gen, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
 
-  if(SFOLDER_Z==0)
-  {
-    #ifndef __PRINT__
-      printf("execute register only version\n");
-    #endif
-    cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory1,0);
-  }
-  else
-  {
-    // printf("execute here 1\n");
-    cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory2,0);
-  }
+//   if(SFOLDER_Z==0)
+//   {
+//     #ifndef __PRINT__
+//       printf("execute register only version\n");
+//     #endif
+//     cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory1,0);
+//   }
+//   else
+//   {
+//     // printf("execute here 1\n");
+//     cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory2,0);
+//   }
 
-#endif
+// #endif
 
   cudaDeviceSynchronize();
   cudaCheckError();
@@ -260,8 +266,7 @@ if(warmup)
 
   execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
           (input, __var_2__,  height, width_y, width_x);
-  cudaDeviceSynchronize();
-  cudaCheckError();
+
   for(int i=1; i<iteration; i++)
   {
      execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
@@ -272,8 +277,11 @@ if(warmup)
   }
 
 #endif
-
-
+#ifdef PERSISTENTLAUNCH
+  cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs, executeSM,0);
+#endif
+  cudaDeviceSynchronize();
+  cudaCheckError();
 #ifdef _TIMER_
   cudaEventRecord(_forma_timer_stop_,0);
   cudaEventSynchronize(_forma_timer_stop_);
@@ -299,7 +307,8 @@ if(warmup)
   cudaDeviceSynchronize();
   cudaCheckError();
   
-#if defined(GEN) || defined(PERSISTENT)
+#if defined(PERSISTENTLAUNCH) 
+// || defined(PERSISTENT)
 if(iteration%2==1)  
 {
   cudaMemcpy(__var_0__, __var_2__, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
@@ -317,8 +326,8 @@ else
   cudaFree(input);
   cudaFree(__var_1__);
   cudaFree(__var_2__);
-  cudaFree(L2_cache);
-  cudaFree(L2_cache1);
+  cudaFree(l2_cache1);
+  cudaFree(l2_cache2);
 }
 
 template void j3d_iterative<float>(float * h_input, int height, int width_y, int width_x, float * __var_0__, int iteration);
