@@ -13,14 +13,16 @@
 //   #define USESMSET (false)
 // #endif
 
-#define TILE_Y (32)
-#define TILE_X (32)
 
 
-#define bdimx (128)
+#define bdimx (256)
 
-#define ITEM_PER_THREAD (TILE_Y/(bdimx/TILE_X))
+#define ITEM_PER_THREAD (8) 
+// (TILE_Y/(bdimx/TILE_X))
 
+#define TILE_X (64)
+#define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
+// (32)
 
 #define RTILE_Z (1)
 

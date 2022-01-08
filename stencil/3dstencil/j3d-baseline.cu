@@ -16,91 +16,6 @@
 #endif
 
 
-// template<class REAL, int halo, int BASE_Z, int SIZE_Z, int SMSIZE, int SM_BASE=0, bool isInit=false, bool sync=true>
-// __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[SMSIZE],
-//                                           int gbase_x, int gbase_y, int gbase_z,
-//                                           int width_x, int width_y, int width_z,
-//                                           int sm_width_x, int sm_base_x,
-//                                           int size_y, int sm_base_y, int ind_y,
-//                                           int tid_x)
-// {
-//   // _Pragma("unroll")
-//   // for(int l_z=0; l_z<SIZE_Z; l_z++)
-//   // {
-//   //   int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-//   //       l_global_z = (MIN(l_global_z,width_x-1));
-//   //   _Pragma("unroll")
-//   //   for(int l_y=0; l_y<size_y; l_y+=1)
-//   //   {
-//   //     int l_global_y = (MIN(gbase_y+l_y-halo,width_y-1));
-//   //       l_global_y = (MAX(l_global_y,0));
-//   //       smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
-//   //           src[l_global_z*width_x*width_y+l_global_y*width_x+
-//   //           MAX((gbase_x+tid_x-halo),0)];
-//   //     if(tid_x<halo*2)
-//   //     {
-//   //         smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + blockDim.x-halo+sm_base_x]=
-//   //             src[l_global_z*width_x*width_y+l_global_y*width_x+
-//   //               MIN(gbase_x+tid_x-halo+blockDim.x,width_x-1)];
-//   //     }
-//   //   }
-//   // }
-//   // if(sync)
-//   // {
-//   //   __syncthreads();
-//   // }
-
-//   _Pragma("unroll")
-//   for(int l_z=0; l_z<SIZE_Z; l_z++)
-//   {
-//     // int l_global_z = (MIN(p_z+l_z,width_z-1));
-//         // l_global_z = (MAX(l_global_z,0));
-//     int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-//         l_global_z = (MIN(l_global_z,width_z-1));
-//     // #pragma unroll
-//     _Pragma("unroll")
-//     for(int l_y=0; l_y<size_y; l_y+=1)
-//     {
-//       int l_global_y = (MIN(gbase_y+l_y+ind_y,width_y-1));
-//         l_global_y = (MAX(l_global_y,0));
-//       #ifndef ASYNCSM
-//         smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + (tid_x-halo) + sm_base_x]=
-//             src[l_global_z*width_x*width_y+l_global_y*width_x+
-//             MAX((gbase_x+tid_x-halo),0)];
-//       #else
-//         __pipeline_memcpy_async(smbuffer_buffer_ptr[l_z+BASE_Z] + sm_width_x*(l_y+sm_base_y+ind_y) + (tid_x-halo) + sm_base_x, 
-//           src + l_global_z*width_x*width_y+l_global_y*width_x+
-//               MAX((gbase_x+tid_x-halo),0)
-//           , sizeof(REAL));
-//       #endif
-//       if(tid_x<halo*2)
-//       {
-//         // sm_rbuffer[ SM_X*SM_Y*((l_z+ps_z+smz_ind)%(Halo*2+1)) + SM_X*(l_y+ps_y) + tid_x + blockDim.x-Halo+ps_x]=
-//         #ifndef ASYNCSM
-//           smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + tid_x + TILE_X-halo+sm_base_x]=
-//               src[l_global_z*width_x*width_y+l_global_y*width_x+
-//                 MIN(gbase_x+tid_x-halo+TILE_X,width_x-1)];
-//         #else
-//           __pipeline_memcpy_async(smbuffer_buffer_ptr[l_z+BASE_Z] + sm_width_x*(l_y+sm_base_y+ind_y) + tid_x + TILE_X -halo+sm_base_x, 
-//               src + l_global_z*width_x*width_y+l_global_y*width_x+
-//                   MIN(gbase_x+tid_x-halo+TILE_X,width_x-1)
-//               , sizeof(REAL));
-//         #endif
-//       }
-//     }
-//   }
-//   #ifdef ASYNCSM
-//     __pipeline_commit();
-//   #endif
-//   if(sync)
-//   {
-//     #ifdef ASYNCSM
-//       __pipeline_wait_prior(0);
-//     #endif
-//     __syncthreads();
-//   }
-// }
-
 template<class REAL, int halo>
 __global__ void kernel3d_baseline(REAL * __restrict__ input, 
                                 REAL * __restrict__ output, 
@@ -127,13 +42,24 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
 
   const int tid_x = threadIdx.x%TILE_X;
   const int tid_y = threadIdx.x/TILE_X;
+  const int dim_y = TILE_Y/ITEM_PER_THREAD;
 
-  const int ps_y = halo + ITEM_PER_THREAD*tid_y;
+  const int cpblocksize_y=(TILE_Y+2*halo)/dim_y;
+  const int cpquotion_y=(TILE_Y+2*halo)%dim_y;
+
+  const int index_y = ITEM_PER_THREAD*tid_y;
+
+  const int cpbase_y = -halo+tid_y*cpblocksize_y+(tid_y<=cpquotion_y?tid_y:cpquotion_y);
+  const int cpend_y = cpbase_y + cpblocksize_y + (tid_y<=cpquotion_y?1:0);
+  // if(tid_x==0&&blockIdx.x==0)
+  //   printf("<%d,%d,%d,%d,%d,%d>",cpbase_y,cpend_y,cpblocksize_y,dim_y,tid_y,ITEM_PER_THREAD);
+  // return;
+  const int ps_y = halo;
   const int ps_x = halo;
-  const int ps_z = halo;
+  // const int ps_z = halo;
 
   const int p_x = blockIdx.x * TILE_X;
-  const int p_y = blockIdx.y * TILE_Y + ITEM_PER_THREAD*tid_y;
+  const int p_y = blockIdx.y * TILE_Y;
   // if(blockIdx.x==0&&tid_x==0)
   //   printf("<%d,%d,%d:%d,%d>",ps_x,ps_y,ps_z,tid_x,tid_y);
   // return;
@@ -147,30 +73,20 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
   // int smz_ind=0;
 
   {
-    //glb2reg 
-    _Pragma("unroll")
-    for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
-    {
-      _Pragma("unroll")
-      for(int l_z=-halo; l_z<1+halo ; l_z++)
-      {
-        int l_global_z = (MIN(p_z+l_z,width_z-1));
-          l_global_z = (MAX(l_global_z,0));
-        int l_global_y = (MIN(p_y+l_y,width_y-1));
-          l_global_y = (MAX(l_global_y,0));
-
-        r_smbuffer[l_z+ps_z][l_y] = input[l_global_z*width_x*width_y+l_global_y*width_x+
-              ((p_x+tid_x))];
-      }
-    }
+    global2regs3d<REAL, ITEM_PER_THREAD, 1+2*halo>
+      (input, r_smbuffer, p_z-halo,width_z, p_y+index_y, width_y, p_x, width_x,tid_x);
+    //need optimization to remove redundent memory access
     global2sm<REAL, halo, 0, halo, halo+1, 0, true, false>
                                         (input, smbuffer_buffer_ptr,
                                           p_x, p_y, p_z,
                                           width_x, width_y, width_z,
 
                                           tile_x_with_halo, ps_x,
-                                          ITEM_PER_THREAD+2*halo, ps_y,-halo, 
+                                          // -halo+index_y, -halo+index_y+ITEM_PER_THREAD+2*halo, ps_y,
+                                          cpbase_y, cpend_y,ps_y,
+                                          // cpsize_y, ps_y,cpbase_y, 
                                           TILE_X, tid_x);
+    __syncthreads();
     for(int global_z=p_z; global_z<p_z_end; global_z+=1)
     {
       __syncthreads();
@@ -181,24 +97,23 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
                                           width_x, width_y, width_z,
 
                                           tile_x_with_halo, ps_x,
-                                          ITEM_PER_THREAD+2*halo, ps_y,-halo, 
+                                          // -halo+index_y, -halo+index_y+ITEM_PER_THREAD+2*halo, ps_y,
+                                          cpbase_y, cpend_y,ps_y,
                                           TILE_X,tid_x);
       __syncthreads();
       
-      REAL sum[ITEM_PER_THREAD];
 
       //sm2reg
-      _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
-      {
-      _Pragma("unroll")
-        for(int l_z=halo; l_z<1+halo ; l_z++)
-        { 
-           r_smbuffer[l_z+ps_z][l_y] = 
-            smbuffer_buffer_ptr[(l_z)][tile_x_with_halo*(l_y+ps_y) + tid_x+ps_x];
-        }
-      }
 
+      sm2regs<REAL, ITEM_PER_THREAD, 1+2*halo, 
+                1+halo, halo, 
+                0, halo*2, 
+                ITEM_PER_THREAD, 1>
+        (smbuffer_buffer_ptr, r_smbuffer, 
+          ps_y+index_y, ps_x, 
+          tile_x_with_halo, tid_x);
+
+      REAL sum[ITEM_PER_THREAD];
       // #pragma unroll
       _Pragma("unroll")
       for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
@@ -209,20 +124,20 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
       //main computation
       computation<REAL,ITEM_PER_THREAD,halo>( sum,
                                       smbuffer_buffer_ptr[0],
-                                      ps_y, tile_x_with_halo, tid_x+ps_x,
+                                      ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
                                       r_smbuffer,
                                       stencilParaInput);
 
-      // reg 2 ptr
-      _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
-      {
-        output[(global_z)*width_x*width_y+(l_y+p_y)*width_x+
-                  (p_x+tid_x)]= sum[l_y];
-      }
+      // // reg 2 ptr
+      reg2global3d<REAL, ITEM_PER_THREAD>(
+            sum, output,
+            global_z, width_z,
+            p_y+index_y, width_y,
+            p_x, width_x,
+            tid_x);
 
       REAL* tmp = smbuffer_buffer_ptr[0];
-      // sm2sm
+      // smswap 
       _Pragma("unroll")
       for(int hl=1; hl<halo+1; hl++)
       {
@@ -230,16 +145,8 @@ __global__ void kernel3d_baseline(REAL * __restrict__ input,
       }
       smbuffer_buffer_ptr[halo]=tmp;
 
-      // reg2reg
-      _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
-      {
-        _Pragma("unroll")
-        for(int l_z=-halo; l_z<halo ; l_z++)
-        { 
-          r_smbuffer[l_z+ps_z][l_y] = r_smbuffer[l_z+ps_z+1][l_y];
-        }
-      }
+      regsself3d<REAL,2*halo+1,ITEM_PER_THREAD>(r_smbuffer);
+
     }
   }
 }

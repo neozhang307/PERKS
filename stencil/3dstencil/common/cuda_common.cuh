@@ -74,40 +74,44 @@ __device__ void __forceinline__ init_reg_array(REAL reg_array[SIZE], int val)
 }
 
 
-template<class REAL, int SIZE_REG, int SIZE, bool considerbound=true>
-__device__ void __forceinline__ reg2global(REAL reg_array[SIZE_REG], REAL* dst, 
-  int global_y, int global_y_size, 
-  int global_x, int global_x_size,
-  int reg_base=0)
+
+template<class REAL, int SIZE_REG, int SIZE=SIZE_REG, int REG_BASE=0>
+__device__ void __forceinline__ reg2global3d(
+            REAL reg_array[SIZE_REG], REAL*dst,
+            int global_z, int width_z,
+            int global_y, int width_y,
+            int global_x, int width_x,
+            int tid_x)
+{
+  _Pragma("unroll")
+  for(int l_y=0; l_y<SIZE; l_y++)
   {
-    _Pragma("unroll")
-    for(int l_y=0; l_y<SIZE; l_y++)
-    {
-      int l_global_y=global_y+l_y;
-      if(considerbound==true)
-      {
-        if(l_global_y>=global_y_size|global_x>=global_x_size)
-        {
-          break;
-        }
-      }
-      dst[(l_global_y) * global_x_size + global_x]=reg_array[l_y+reg_base];
-    }
+    dst[global_z*width_x*width_y+(global_y+l_y)*width_x+global_x+tid_x]=reg_array[l_y+REG_BASE];
+  }
 }
 
 
 
-template<class REAL, int REG_SIZE, int SIZE>
-__device__ void __forceinline__ global2reg(REAL*src, REAL reg_array[REG_SIZE],
-  int global_y, int global_y_size,
-  int global_x, int global_x_size,
-  int reg_base)
+template<class REAL, int REG_SIZE_Y, int REG_SIZE_Z, int BASE_Y=0, int BASE_Z=0, int SIZE_Y=REG_SIZE_Y, int SIZE_Z=REG_SIZE_Z>
+__device__ void __forceinline__ global2regs3d(
+  REAL*src, REAL reg_array[REG_SIZE_Z][REG_SIZE_Y],
+  int global_z, int width_z,
+  int global_y, int width_y,
+  int global_x, int width_x,
+  int tid_x)
 {
   _Pragma("unroll")
-  for (int l_y = 0; l_y < SIZE ; l_y++) 
+  for(int l_y=0; l_y<SIZE_Y; l_y++)
   {
+    int l_global_y = (MIN(global_y+l_y+BASE_Y,width_y-1));
+    l_global_y = (MAX(l_global_y,0));
+    _Pragma("unroll")
+    for(int l_z=0; l_z<SIZE_Z ; l_z++)
     {
-      reg_array[l_y+reg_base] =  src[(l_y+global_y) * global_x_size + global_x];
+      int l_global_z = (MIN(global_z+l_z+BASE_Z,width_z-1));
+        l_global_z = (MAX(l_global_z,0));
+      reg_array[l_z+BASE_Z][l_y+BASE_Y] = src[l_global_z*width_x*width_y+l_global_y*width_x+
+            ((global_x+tid_x))];
     }
   }
 }
@@ -129,28 +133,43 @@ __device__ void __forceinline__ ptrselfcp(REAL *ptr,
   }
 }
 
-template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE,int halo=0>
-__device__ void __forceinline__ reg2reg(REAL src_reg[SRC_SIZE], REAL dst_reg[DST_SIZE],
-                                        int src_basic, int dst_basic)
-{
-  _Pragma("unroll")
-  for(int l_y=0; l_y<SIZE; l_y++)
-  {
-    dst_reg[l_y+dst_basic]=src_reg[l_y+src_basic];
-  }
-}
+// template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE,int halo=0>
+// __device__ void __forceinline__ reg2reg(REAL src_reg[SRC_SIZE], REAL dst_reg[DST_SIZE],
+//                                         int src_basic, int dst_basic)
+// {
+//   _Pragma("unroll")
+//   for(int l_y=0; l_y<SIZE; l_y++)
+//   {
+//     dst_reg[l_y+dst_basic]=src_reg[l_y+src_basic];
+//   }
+// }
 
-template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE, int halo>
-__device__ void __forceinline__ regs2regs(REAL src_reg[2*halo+1][SRC_SIZE], REAL dst_reg[2*halo+1][DST_SIZE],
-                                        int src_basic, int dst_basic)
+// template<class REAL, int SRC_SIZE, int DST_SIZE, int SIZE, int halo>
+// __device__ void __forceinline__ regs2regs(REAL src_reg[2*halo+1][SRC_SIZE], REAL dst_reg[2*halo+1][DST_SIZE],
+//                                         int src_basic, int dst_basic)
+// {
+//   _Pragma("unroll")
+//   for(int l_x=0; l_x<halo*2+1; l_x++)
+//   {
+//     _Pragma("unroll")
+//     for(int l_y=0; l_y<SIZE; l_y++)
+//     {
+//       dst_reg[l_x][l_y+dst_basic]=src_reg[l_x][l_y+src_basic];
+//     }
+//   }
+// }
+
+template<class REAL, int SIZE_Z, int SIZE_Y>
+__device__ void __forceinline__ regsself3d(
+  REAL reg_array[SIZE_Z][SIZE_Y])
 {
   _Pragma("unroll")
-  for(int l_x=0; l_x<halo*2+1; l_x++)
+  for(int l_y=0; l_y<SIZE_Y; l_y++)
   {
     _Pragma("unroll")
-    for(int l_y=0; l_y<SIZE; l_y++)
-    {
-      dst_reg[l_x][l_y+dst_basic]=src_reg[l_x][l_y+src_basic];
+    for(int l_z=0; l_z<SIZE_Z ; l_z++)
+    { 
+      reg_array[l_z][l_y] = reg_array[l_z+1][l_y];
     }
   }
 }
@@ -225,7 +244,7 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
                                           int gbase_x, int gbase_y, int gbase_z,
                                           int width_x, int width_y, int width_z,
                                           int sm_width_x, int sm_base_x,
-                                          int size_y, int sm_base_y, int ind_y,
+                                          int y_start, int y_end , int sm_base_y,
                                           int tile_x, int tid_x)
 {
   _Pragma("unroll")
@@ -233,17 +252,17 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
   {
     int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
         l_global_z = (MIN(l_global_z,width_x-1));
-    _Pragma("unroll")
-    for(int l_y=0; l_y<size_y; l_y+=1)
+    // _Pragma("unroll")
+    for(int l_y=y_start; l_y<y_end; l_y+=1)
     {
-      int l_global_y = (MIN(gbase_y+l_y+ind_y,width_y-1));
+      int l_global_y = (MIN(gbase_y+l_y,width_y-1));
         l_global_y = (MAX(l_global_y,0));
-        smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + (tid_x-halo) + sm_base_x]=
+        smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
             src[l_global_z*width_x*width_y+l_global_y*width_x+
             MAX((gbase_x+tid_x-halo),0)];
       if(tid_x<halo*2)
       {
-          smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y+ind_y) + tid_x + tile_x-halo+sm_base_x]=
+          smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
               src[l_global_z*width_x*width_y+l_global_y*width_x+
                 MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
       }
@@ -291,38 +310,62 @@ __device__ void __forceinline__ sm2global(REAL *sm_src, REAL* dst,
   }
 }
 
-template<class REAL, int REG_SIZE, int SIZE, int halo=0>
-__device__ void __forceinline__ sm2reg(REAL* sm_src, REAL reg_dst[SIZE],
-                                      int y_base, 
-                                      int x_base, int x_id,
-                                      int sm_width, 
-                                      int reg_base=0)
-{
-  _Pragma("unroll")
-  for(int l_y=0; l_y<SIZE ; l_y++)
-  {
-    reg_dst[l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id];//input[(global_y) * width_x + global_x];
-  }
-}
+// template<class REAL, int REG_SIZE, int SIZE, int halo=0>
+// __device__ void __forceinline__ sm2reg(REAL* sm_src, REAL reg_dst[SIZE],
+//                                       int y_base, 
+//                                       int x_base, int x_id,
+//                                       int sm_width, 
+//                                       int reg_base=0)
+// {
+//   _Pragma("unroll")
+//   for(int l_y=0; l_y<SIZE ; l_y++)
+//   {
+//     reg_dst[l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id];//input[(global_y) * width_x + global_x];
+//   }
+// }
 
-template<class REAL, int REG_SIZE, int SIZE, int halo>
-__device__ void __forceinline__ sm2regs(REAL* sm_src, REAL reg_dst[2*halo+1][REG_SIZE],
+// template<class REAL, int REG_SIZE, int SIZE, int halo>
+// __device__ void __forceinline__ sm2regs(REAL* sm_src, REAL reg_dst[2*halo+1][REG_SIZE],
+//                                       int y_base, 
+//                                       int x_base, int x_id,
+//                                       int sm_width, 
+//                                       int reg_base=0)
+// {
+//   _Pragma("unroll")
+//   for(int l_x=0; l_x<halo*2+1; l_x++)
+//   {
+//     _Pragma("unroll")
+//     for(int l_y=0; l_y<SIZE ; l_y++)
+//     {
+//       reg_dst[l_x][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+l_x-halo];//input[(global_y) * width_x + global_x];
+//     }
+//   }
+// }
+
+
+
+template<class REAL, int REG_SIZE_Y, int REG_SIZE_Z, 
+            int SM_SIZE_Z, int SM_BASE_Z,
+            int BASE_Y=0, int BASE_Z=0, 
+            int SIZE_Y=REG_SIZE_Y, int SIZE_Z=REG_SIZE_Z>
+__device__ void __forceinline__ sm2regs(REAL* sm_src[SM_SIZE_Z], REAL reg_dst[REG_SIZE_Z][REG_SIZE_Y],
                                       int y_base, 
-                                      int x_base, int x_id,
-                                      int sm_width, 
-                                      int reg_base=0)
+                                      int x_base, 
+                                      int sm_width,
+                                      int tid_x)
 {
   _Pragma("unroll")
-  for(int l_x=0; l_x<halo*2+1; l_x++)
+  for(int l_y=0; l_y<SIZE_Y; l_y++)
   {
     _Pragma("unroll")
-    for(int l_y=0; l_y<SIZE ; l_y++)
+    for(int l_z=0; l_z<SIZE_Z ; l_z++)
     {
-      reg_dst[l_x][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+l_x-halo];//input[(global_y) * width_x + global_x];
+      reg_dst[l_z+BASE_Z][l_y+BASE_Y] = sm_src[l_z+SM_BASE_Z][(l_y+y_base)*sm_width+x_base+tid_x];//input[(global_y) * width_x + global_x];
     }
   }
-}
 
+
+}
 
 template<class REAL, int REG_SIZE, int SIZE>
 __device__ void __forceinline__ reg2sm( REAL reg_src[REG_SIZE], REAL* sm_dst,
