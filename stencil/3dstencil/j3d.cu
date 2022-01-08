@@ -21,16 +21,16 @@
 
 // #define TILE_X 256
 // #define NAIVE
-#if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_MEMWARP)
+#if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
   #define TRADITIONLAUNCH
 #endif
 #if defined(GEN)|| defined(GENWR) ||defined(PERSISTENT)
   #define PERSISTENTLAUNCH
 #endif
-#if defined PERSISTENTLAUNCH||defined(BASELINE_MEMWARP)
+#if defined PERSISTENTLAUNCH||defined(BASELINE_CM)
   #define PERSISTENTTHREAD
 #endif
-#if defined(BASELINE)||defined(BASELINE_MEMWARP)||defined(GEN)||defined(GENWR)||defined(PERSISTENT)
+#if defined(BASELINE)||defined(BASELINE_MEMWARP)||defined(BASELINE_CM) ||defined(GEN)||defined(GENWR)||defined(PERSISTENT)
   #define USEMAXSM
 #endif
 
@@ -80,7 +80,7 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
 #ifdef NAIVE
   auto execute_kernel = kernel3d_restrict<REAL,HALO>;
 #endif 
-#ifdef BASELINE
+#if defined(BASELINE) ||defined(BASELINE_CM)
   auto execute_kernel = kernel3d_baseline<REAL,HALO>;
 #endif
 #ifdef BASELINE_MEMWARP
@@ -142,7 +142,7 @@ printf("sm is %ld\n",executeSM);
 #endif
 #ifdef BASELINE_MEMWARP
   dim3 block_dim_2(bdimx+2*TILE_X, 1, 1);
-  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y,   max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y));
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y,max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y));
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
   
@@ -150,32 +150,16 @@ printf("sm is %ld\n",executeSM);
   dim3 executeBlockDim=block_dim_2;
   dim3 executeGridDim=grid_dim_2;
 #endif
-#if defined(GEN) || defined(PERSISTENT)||defined(BASEPER) 
+#if defined(PERSISTENTTHREAD)
   int numBlocksPerSm_current=0;
-  #ifdef GEN
-    if(SFOLDER_Z==0)
-    {
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_persistent_iterative_gen, TILE_X, sharememory1);
-    }
-    else
-    {
-      cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_persistent_iterative_gen, TILE_X, sharememory2);
-    }
-  #endif
 
-  #if defined(BASEPER)
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_persistent, TILE_X, sharememory0);
-  #endif
-  #ifdef PERSISTENT
-  cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, kernel_persistent_iterative, TILE_X, sharememory0);
-  #endif
+        &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
 
-  dim3 block_dim3(TILE_X, 1, 1);
-  dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
+  dim3 block_dim_3(bdimx, 1, 1);
+  dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y)));
+  dim3 executeBlockDim=block_dim_3;
+  dim3 executeGridDim=grid_dim_3;
 
 #endif
 
@@ -241,24 +225,7 @@ if(warmup)
 #endif
 
 // #define PERSISTENT
-  
 
-  // // int sharememroy1 = sharememory0+(TILE_Y)
-#ifdef BASEPER
-
-  // printf("%d\n",GDIM_X);
-  kernel_persistent<<<grid_dim3, block_dim3, sharememory0>>>
-          (input, __var_2__, height, width_y, width_x);
-
-  for(int i=1; i<iteration; i++)
-  {
-     kernel_persistent<<<grid_dim3, block_dim3, sharememory0>>>
-          (__var_2__, __var_1__, height, width_y, width_x);
-    REAL* tmp = __var_2__;
-    __var_2__=__var_1__;
-    __var_1__= tmp;
-  }
-#endif
   //persistent kernel
 // #define GEN
 
@@ -290,8 +257,7 @@ if(warmup)
   cudaDeviceSynchronize();
   cudaCheckError();
 #ifdef TRADITIONLAUNCH
-  // dim3 executeBlockDim=block_dim_1;
-  // dim3 executeGridDim=grid_dim_1;
+
   execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
           (input, __var_2__,  height, width_y, width_x);
   cudaDeviceSynchronize();
@@ -304,6 +270,7 @@ if(warmup)
     __var_2__=__var_1__;
     __var_1__= tmp;
   }
+
 #endif
 
 
