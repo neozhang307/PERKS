@@ -26,21 +26,21 @@
 // {
 //   //
 
-template<class REAL, int halo>
+template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y>
 __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input, 
                                 REAL * __restrict__ output, 
                                 int width_z, int width_y, int width_x) 
 {
   // printf("?");
-  const int tile_x_with_halo=TILE_X+2*halo;
-  const int tile_y_with_halo=TILE_Y+2*halo;
+  const int tile_x_with_halo=LOCAL_TILE_X+2*halo;
+  const int tile_y_with_halo=LOCAL_TILE_Y+2*halo;
   stencilParaT;
   
   extern __shared__ char sm[];
   REAL* sm_rbuffer = (REAL*)sm+1;
 
-  register REAL r_smbuffer[2*halo+1][ITEM_PER_THREAD];
-  // printf("%d\n",ITEM_PER_THREAD);
+  register REAL r_smbuffer[2*halo+1][LOCAL_ITEM_PER_THREAD];
+  // printf("%d\n",LOCAL_ITEM_PER_THREAD);
   // return;
   REAL* smbuffer_buffer_ptr[halo+1];
   smbuffer_buffer_ptr[0]=sm_rbuffer;
@@ -50,17 +50,17 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
     smbuffer_buffer_ptr[hl]=smbuffer_buffer_ptr[hl-1]+tile_x_with_halo*tile_y_with_halo;
   }
 
-  const int tid_x = threadIdx.x%TILE_X;
-  const int tid_y = threadIdx.x/TILE_X-2;
+  const int tid_x = threadIdx.x%LOCAL_TILE_X;
+  const int tid_y = threadIdx.x/LOCAL_TILE_X-2;
 
-  const int index_y=tid_y*ITEM_PER_THREAD;
+  const int index_y=tid_y*LOCAL_ITEM_PER_THREAD;
 
   const int ps_y = halo;
   const int ps_x = halo;
   const int ps_z = halo;
 
-  const int p_x = blockIdx.x * TILE_X;
-  const int p_y = blockIdx.y * TILE_Y;
+  const int p_x = blockIdx.x * LOCAL_TILE_X;
+  const int p_y = blockIdx.y * LOCAL_TILE_Y;
   // if(blockIdx.x==0&&tid_x==0)
   //   printf("<%d,%d,%d:%d,%d>",ps_x,ps_y,ps_z,tid_x,tid_y);
   // return;   32*32
@@ -76,7 +76,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
   {
     // glb2reg 
     _Pragma("unroll")
-    for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+    for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
     {
       _Pragma("unroll")
       for(int l_z=-halo; l_z<1+halo ; l_z++)
@@ -97,7 +97,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
       int l_global_z = (MAX(p_z+l_z+0,0));
           l_global_z = (MIN(l_global_z,width_x-1));
       _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y+=1)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y+=1)
       {
         int l_global_y = (MIN(p_y+l_y+index_y,width_y-1));
           l_global_y = (MAX(l_global_y,0));
@@ -117,7 +117,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
         int l_global_z = (MAX(global_z+l_z+halo,0));
             l_global_z = (MIN(l_global_z,width_x-1));
         _Pragma("unroll")
-        for(int l_y=0; l_y<ITEM_PER_THREAD; l_y+=1)
+        for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y+=1)
         {
           int l_global_y = (MIN(p_y+l_y+index_y,width_y-1));
             l_global_y = (MAX(l_global_y,0));
@@ -126,20 +126,20 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
                 MAX((p_x+tid_x),0)];
           // if(tid_x<halo*2)
           // {
-          //     smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + TILE_X-halo+ps_x]=
+          //     smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
           //         input[l_global_z*width_x*width_y+l_global_y*width_x+
-          //           MIN(p_x+tid_x-halo+TILE_X,width_x-1)];
+          //           MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
           // }
         }
       }
       
       __syncthreads();
       
-      REAL sum[ITEM_PER_THREAD];
+      REAL sum[LOCAL_ITEM_PER_THREAD];
 
       //sm2reg
       _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
       _Pragma("unroll")
         for(int l_z=halo; l_z<1+halo ; l_z++)
@@ -151,13 +151,13 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
 
       // #pragma unroll
       _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
         sum[l_y]=0;
       }
 
       //main computation
-      computation<REAL,ITEM_PER_THREAD,halo>( sum,
+      computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
                                       smbuffer_buffer_ptr[0],
                                       ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
                                       r_smbuffer,
@@ -165,7 +165,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
 
       // reg 2 ptr
       _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
         output[(global_z)*width_x*width_y+(l_y+p_y+index_y)*width_x+
                   (p_x+tid_x)]= sum[l_y];
@@ -182,7 +182,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
 
       // reg2reg
       _Pragma("unroll")
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
         _Pragma("unroll")
         for(int l_z=-halo; l_z<halo ; l_z++)
@@ -196,7 +196,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
   {
     //north south
     const int index_y=0;
-    const int index_y_end=TILE_Y;
+    const int index_y_end=LOCAL_TILE_Y;
     _Pragma("unroll")
     for(int l_z=0; l_z<halo; l_z++)
     {
@@ -212,9 +212,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
               MAX((p_x+tid_x-halo),0)];
         if(tid_x<halo*2)
         {
-            smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + TILE_X-halo+ps_x]=
+            smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
                 input[l_global_z*width_x*width_y+l_global_y*width_x+
-                  MIN(p_x+tid_x-halo+TILE_X,width_x-1)];
+                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
         }
       }
 
@@ -228,9 +228,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
               MAX((p_x+tid_x-halo),0)];
         if(tid_x<halo*2)
         {
-            smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y+index_y_end) + tid_x + TILE_X-halo+ps_x]=
+            smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y+index_y_end) + tid_x + LOCAL_TILE_X-halo+ps_x]=
                 input[l_global_z*width_x*width_y+l_global_y*width_x+
-                  MIN(p_x+tid_x-halo+TILE_X,width_x-1)];
+                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
         }
       }
     }
@@ -254,9 +254,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
                 MAX((p_x+tid_x-halo),0)];
           if(tid_x<halo*2)
           {
-              smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + TILE_X-halo+ps_x]=
+              smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
                   input[l_global_z*width_x*width_y+l_global_y*width_x+
-                    MIN(p_x+tid_x-halo+TILE_X,width_x-1)];
+                    MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
           }
         }
 
@@ -270,9 +270,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
                 MAX((p_x+tid_x-halo),0)];
           if(tid_x<halo*2)
           {
-              smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y_end) + tid_x + TILE_X-halo+ps_x]=
+              smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y+index_y_end) + tid_x + LOCAL_TILE_X-halo+ps_x]=
                   input[l_global_z*width_x*width_y+l_global_y*width_x+
-                    MIN(p_x+tid_x-halo+TILE_X,width_x-1)];
+                    MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
           }
         }
       }
@@ -291,14 +291,14 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
   else if(tid_y==-2)
   { //east west 
     // const int index_y=0;
-    // const int index_y_end=TILE_Y;
+    // const int index_y_end=LOCAL_TILE_Y;
     _Pragma("unroll")
     for(int l_z=0; l_z<halo; l_z++)
     {
       int l_global_z = (MAX(p_z+l_z+0,0));
           l_global_z = (MIN(l_global_z,width_x-1));
       // _Pragma("unroll")
-      for(int l_y=tid_x; l_y<TILE_Y; l_y+=TILE_X)
+      for(int l_y=tid_x; l_y<LOCAL_TILE_Y; l_y+=LOCAL_TILE_X)
       {
         //west
         _Pragma("unroll")
@@ -314,9 +314,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
          _Pragma("unroll")
         for(int l_x=0; l_x<halo; l_x++)
         {
-          int l_global_x = (MIN(p_x+l_x+TILE_X,width_x-1));
+          int l_global_x = (MIN(p_x+l_x+LOCAL_TILE_X,width_x-1));
           l_global_x = (MAX(l_global_x,0));
-          smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y) + l_x+TILE_X + ps_x]=
+          smbuffer_buffer_ptr[l_z+0][tile_x_with_halo*(l_y+ps_y) + l_x+LOCAL_TILE_X + ps_x]=
               input[l_global_z*width_x*width_y+(p_y+l_y)*width_x+
               l_global_x];
         }
@@ -332,7 +332,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
       {
         int l_global_z = (MAX(global_z+l_z+halo,0));
             l_global_z = (MIN(l_global_z,width_x-1));
-        for(int l_y=tid_x; l_y<TILE_Y; l_y+=TILE_X)
+        for(int l_y=tid_x; l_y<LOCAL_TILE_Y; l_y+=LOCAL_TILE_X)
         {
           //west
           _Pragma("unroll")
@@ -349,9 +349,9 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
           _Pragma("unroll")
           for(int l_x=0; l_x<halo; l_x++)
           {
-            int l_global_x = (MIN(p_x+l_x+TILE_X,width_x-1));
+            int l_global_x = (MIN(p_x+l_x+LOCAL_TILE_X,width_x-1));
             l_global_x = (MAX(l_global_x,0));
-            smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y) + l_x + TILE_X+ ps_x]=
+            smbuffer_buffer_ptr[l_z+halo][tile_x_with_halo*(l_y+ps_y) + l_x + LOCAL_TILE_X+ ps_x]=
                 input[l_global_z*width_x*width_y+(p_y+l_y)*width_x+
                 l_global_x];
           }
@@ -372,7 +372,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
 }
 
 
-template __global__ void kernel3d_baseline_memwarp<float,HALO> 
+template __global__ void kernel3d_baseline_memwarp<float,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y> 
     (float *__restrict__, float *__restrict__ , int , int , int );
-template __global__ void kernel3d_baseline_memwarp<double,HALO> 
+template __global__ void kernel3d_baseline_memwarp<double,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y> 
     (double *__restrict__, double *__restrict__ , int , int , int );

@@ -21,10 +21,10 @@
 
 // #define TILE_X 256
 // #define NAIVE
-#if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
+#if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)||defined(BASELINE_MEMWARP)
   #define TRADITIONLAUNCH
 #endif
-#if defined(GEN)|| defined(GENWR) ||defined(PERSISTENT)
+#if defined(GEN)||defined(PERSISTENT)
   #define PERSISTENTLAUNCH
 #endif
 #if defined PERSISTENTLAUNCH||defined(BASELINE_CM)
@@ -81,13 +81,16 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
   auto execute_kernel = kernel3d_restrict<REAL,HALO>;
 #endif 
 #if defined(BASELINE) ||defined(BASELINE_CM)
-  auto execute_kernel = kernel3d_baseline<REAL,HALO>;
+  auto execute_kernel = kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef BASELINE_MEMWARP
-  auto execute_kernel = kernel3d_baseline_memwarp<REAL,HALO>;
+  auto execute_kernel = kernel3d_baseline_memwarp<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef PERSISTENT
-  auto execute_kernel = kernel3d_persistent<REAL,HALO>;
+  auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
+#endif
+#ifdef GEN
+  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 
 //shared memory related 
@@ -97,10 +100,10 @@ size_t executeSM=0;
     executeSM=basic_sm_space;
 #endif
 printf("sm is %ld\n",executeSM);
-#if defined(GEN) || defined(MIX)
-    int sharememory1 = basic_sm_space+2*BD_STEP_XY*FOLDER_Z*sizeof(REAL);
-    int sharememory2 = sharememory1 + sizeof(REAL) * (SFOLDER_Z)*(TILE_Y*2-1)*TILE_X;
-#endif
+// #if defined(GEN) || defined(MIX)
+    // int sharememory1 = basic_sm_space+2*BD_STEP_XY*FOLDER_Z*sizeof(REAL);
+    // int sharememory2 = sharememory1 + sizeof(REAL) * (SFOLDER_Z)*(TILE_Y*2-1)*TILE_X;
+// #endif
 
   REAL * input;
   cudaMalloc(&input,sizeof(REAL)*(height*width_x*width_y));
@@ -191,28 +194,7 @@ printf("sm is %ld\n",executeSM);
       (void*)&l_iteration};
   // #endif
 #endif
-// #ifdef GEN
-//   void* KernelArgs1[] ={(void**)&input,(void*)&__var_2__,
-//     (void**)&height,(void**)&width_y,(void*)&width_x,
-//     (void**)&L2_cache,(void**)&L2_cache1,
-//     (void*)&l_iteration};
-//   #ifdef __PRINT__  
-//     void* KernelArgs1NULL[] ={(void**)&__var_2__,(void*)&__var_1__,
-//       (void**)&height,(void**)&width_y,(void*)&width_x,
-//       (void**)&L2_cache,(void**)&L2_cache1,
-//       (void*)&l_iteration};
-//   #endif 
-// #endif
-// #ifndef __PRINT__
-//   // printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
-//   #ifndef NAIVE
-//     printf("shared memroy size is %f KB\n",(REAL)sharememory0/1024);
-//   #endif
-//   #if defined(GEN) || defined(MIX)
-//     printf("shared memroy size (add boundary) is %f KB\n",(REAL)sharememory1/1024);
-//     printf("shared memroy size when use shared memory to cache(add boundary) is %f KB\n",(REAL)sharememory2/1024);
-//   #endif
-// #endif
+
 bool warmup=false;
 if(warmup)
 {
@@ -220,9 +202,9 @@ if(warmup)
     execute_kernel<<<executeGridDim, executeGridDim, executeSM>>>
             (__var_2__, __var_1__,  height, width_y, width_x);
   #endif
-#ifdef PERSISTENTLAUNCH
-  cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
-#endif
+  #ifdef PERSISTENTLAUNCH
+    cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
+  #endif
 }
 
 #ifdef _TIMER_
@@ -232,38 +214,8 @@ if(warmup)
   cudaEventRecord(_forma_timer_start_,0);
 #endif
 
-// #define PERSISTENT
 
-  //persistent kernel
-// #define GEN
-
-
-  //cached persistent kernel
-
-// #ifdef GEN
-
-//   // cudaFuncSetAttribute(kernel_persistent_iterative_register, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
-//   // cudaFuncSetAttribute(kernel_persistent_iterative_gen, cudaFuncAttributeMaxDynamicSharedMemorySize, 96 * 1024);
-
-//   if(SFOLDER_Z==0)
-//   {
-//     #ifndef __PRINT__
-//       printf("execute register only version\n");
-//     #endif
-//     cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory1,0);
-//   }
-//   else
-//   {
-//     // printf("execute here 1\n");
-//     cudaLaunchCooperativeKernel((void*)kernel_persistent_iterative_gen, grid_dim3, block_dim3, KernelArgs1, sharememory2,0);
-//   }
-
-// #endif
-
-  cudaDeviceSynchronize();
-  cudaCheckError();
 #ifdef TRADITIONLAUNCH
-
   execute_kernel<<<executeGridDim, executeBlockDim,executeSM>>>
           (input, __var_2__,  height, width_y, width_x);
 
@@ -275,7 +227,6 @@ if(warmup)
     __var_2__=__var_1__;
     __var_1__= tmp;
   }
-
 #endif
 #ifdef PERSISTENTLAUNCH
   cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs, executeSM,0);
@@ -309,14 +260,14 @@ if(warmup)
   
 #if defined(PERSISTENTLAUNCH) 
 // || defined(PERSISTENT)
-if(iteration%2==1)  
-{
-  cudaMemcpy(__var_0__, __var_2__, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
-}
-else
-{
-  cudaMemcpy(__var_0__, input, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
-}
+  if(iteration%2==1)  
+  {
+    cudaMemcpy(__var_0__, __var_2__, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
+  }
+  else
+  {
+    cudaMemcpy(__var_0__, input, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
+  }
 #else
   cudaMemcpy(__var_0__, __var_2__, sizeof(REAL)*height*width_x*width_y, cudaMemcpyDeviceToHost);
 #endif
