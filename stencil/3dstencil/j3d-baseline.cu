@@ -34,12 +34,9 @@ kernel3d_persistent(REAL * __restrict__ input,
   const int tile_x_with_halo=LOCAL_TILE_X+2*halo;
   const int tile_y_with_halo=LOCAL_TILE_Y+2*halo;
   stencilParaT;
-  
   extern __shared__ char sm[];
   REAL* sm_rbuffer = (REAL*)sm+1;
-
   register REAL r_smbuffer[2*halo+1][LOCAL_ITEM_PER_THREAD];
- 
   REAL* smbuffer_buffer_ptr[halo+1];
   smbuffer_buffer_ptr[0]=sm_rbuffer;
   #pragma unroll
@@ -47,34 +44,25 @@ kernel3d_persistent(REAL * __restrict__ input,
   {
     smbuffer_buffer_ptr[hl]=smbuffer_buffer_ptr[hl-1]+tile_x_with_halo*tile_y_with_halo;
   }
-
   const int tid_x = threadIdx.x%LOCAL_TILE_X;
   const int tid_y = threadIdx.x/LOCAL_TILE_X;
   const int dim_y = LOCAL_TILE_Y/LOCAL_ITEM_PER_THREAD;
-
   const int cpblocksize_y=(LOCAL_TILE_Y+2*halo)/dim_y;
   const int cpquotion_y=(LOCAL_TILE_Y+2*halo)%dim_y;
-
   const int index_y = LOCAL_ITEM_PER_THREAD*tid_y;
-
   const int cpbase_y = -halo+tid_y*cpblocksize_y+(tid_y<=cpquotion_y?tid_y:cpquotion_y);
   const int cpend_y = cpbase_y + cpblocksize_y + (tid_y<=cpquotion_y?1:0);
-
   const int ps_y = halo;
   const int ps_x = halo;
   // const int ps_z = halo;
-
   const int p_x = blockIdx.x * LOCAL_TILE_X;
   const int p_y = blockIdx.y * LOCAL_TILE_Y;
-
   int blocksize_z=(width_z/gridDim.z);
   int z_quotient = width_z%gridDim.z;
-
   const int p_z =  blockIdx.z * (blocksize_z) + (blockIdx.z<=z_quotient?blockIdx.z:z_quotient);
   blocksize_z += (blockIdx.z<z_quotient?1:0);
   const int p_z_end = p_z + (blocksize_z);
- 
-  // int smz_ind=0;
+
 #ifdef PERSISTENT  
   cg::grid_group gg = cg::this_grid();
   for(int iter=0; iter<iteration; iter++)
@@ -97,21 +85,15 @@ kernel3d_persistent(REAL * __restrict__ input,
     for(int global_z=p_z; global_z<p_z_end; global_z+=1)
     {
       __syncthreads();
-      
       global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
                                         (input, smbuffer_buffer_ptr,
                                           p_x, p_y, global_z,
                                           width_x, width_y, width_z,
-
                                           tile_x_with_halo, ps_x,
-                                          // -halo+index_y, -halo+index_y+LOCAL_ITEM_PER_THREAD+2*halo, ps_y,
                                           cpbase_y, cpend_y,ps_y,
                                           LOCAL_TILE_X,tid_x);
       __syncthreads();
-      
-
       //sm2reg
-
       sm2regs<REAL, LOCAL_ITEM_PER_THREAD, 1+2*halo, 
                 1+halo, halo, 
                 0, halo*2, 
@@ -127,14 +109,12 @@ kernel3d_persistent(REAL * __restrict__ input,
       {
         sum[l_y]=0;
       }
-
       //main computation
       computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
                                       smbuffer_buffer_ptr[0],
                                       ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
                                       r_smbuffer,
                                       stencilParaInput);
-
       // // reg 2 ptr
       reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
             sum, output,
@@ -142,7 +122,6 @@ kernel3d_persistent(REAL * __restrict__ input,
             p_y+index_y, width_y,
             p_x, width_x,
             tid_x);
-
       REAL* tmp = smbuffer_buffer_ptr[0];
       // smswap 
       _Pragma("unroll")
@@ -151,9 +130,7 @@ kernel3d_persistent(REAL * __restrict__ input,
         smbuffer_buffer_ptr[hl-1]=smbuffer_buffer_ptr[hl];
       }
       smbuffer_buffer_ptr[halo]=tmp;
-
       regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
-
     }
     #ifdef PERSISTENT
       if(iter>=iteration-1)break;
