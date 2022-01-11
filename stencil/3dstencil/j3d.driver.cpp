@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
 
 #endif
 
-  int domain_hallo=HALO*2;
+  int domain_hallo=0;//HALO*2;
   REAL error =
     checkError3D<REAL>
     (width_y, width_x, (REAL*)output, (REAL*) output_gold, domain_hallo, height-domain_hallo, domain_hallo,

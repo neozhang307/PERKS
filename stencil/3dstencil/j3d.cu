@@ -90,7 +90,7 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
   auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef GEN
-  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
+  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,0,true>;
 #endif
 
 //shared memory related 
@@ -152,10 +152,24 @@ printf("sm is %ld\n",executeSM);
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
   
-  printf("<%d,%d,%d>",grid_dim_2.x,grid_dim_2.y,grid_dim_2.z);
   dim3 executeBlockDim=block_dim_2;
   dim3 executeGridDim=grid_dim_2;
 #endif
+
+#ifdef PERSISTENTLAUNCH
+  int max_sm_flder=0;
+#endif
+#if defined(GEN)
+
+  
+  int reg_folder_z=0;
+  max_sm_flder=4;
+  
+  int sharememory1 = 2*(CACHE_TILE_Y)*(max_sm_flder+reg_folder_z)*sizeof(REAL);
+  int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(CACHE_TILE_Y)*TILE_X;
+  executeSM+=sharememory2;
+#endif
+
 #if defined(PERSISTENTTHREAD)
   int numBlocksPerSm_current=0;
 
@@ -170,28 +184,30 @@ printf("sm is %ld\n",executeSM);
   printf("plckpersm is %d\n", numBlocksPerSm_current);
 #endif
 
+
   printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
 
   size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2 ;
-#ifndef __PRINT__
-  printf("l2 cache used is %ld KB : 4096 KB \n",L2_utage/1024);
-#endif
+
   REAL * l2_cache1;
   REAL * l2_cache2;
   cudaMalloc(&l2_cache1,L2_utage);
   cudaMalloc(&l2_cache2,L2_utage);
-   
+#ifndef __PRINT__
+  printf("l2 cache used is %ld KB : 4096 KB \n",L2_utage/1024);
+#endif
+
 #ifdef PERSISTENTLAUNCH
   int l_iteration=iteration;
   void* KernelArgs[] ={(void**)&input,(void*)&__var_2__,
     (void**)&height,(void**)&width_y,(void*)&width_x,
     (void**)&l2_cache1, (void**)&l2_cache2,
-    (void*)&l_iteration};
+    (void*)&l_iteration,(void*)&max_sm_flder};
   // #ifdef __PRINT__  
   void* KernelArgsNULL[] ={(void**)&__var_2__,(void*)&__var_1__,
       (void**)&height,(void**)&width_y,(void*)&width_x,
       (void**)&l2_cache1, (void**)&l2_cache2,
-      (void*)&l_iteration};
+      (void*)&l_iteration,(void*)&max_sm_flder};
   // #endif
 #endif
 
