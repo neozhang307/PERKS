@@ -51,7 +51,7 @@ kernel3d_general(REAL * __restrict__ input,
   /**********************/
   /*******register*******/
   register REAL r_smbuffer[2*halo+1][LOCAL_ITEM_PER_THREAD];
-  register REAL r_space[reg_folder_z<=0?1:reg_folder_z][LOCAL_TILE_Y-2*halo];
+  register REAL r_space[reg_folder_z<=0?1:reg_folder_z][LOCAL_ITEM_PER_THREAD];
   /***********************/
   const int tid_x = threadIdx.x%LOCAL_TILE_X;
   const int tid_y = threadIdx.x/LOCAL_TILE_X;
@@ -77,23 +77,36 @@ kernel3d_general(REAL * __restrict__ input,
 
   const int p_z =  blockIdx.z * (blocksize_z) + (blockIdx.z<=z_quotient?blockIdx.z:z_quotient);
   blocksize_z += (blockIdx.z<z_quotient?1:0);
-  // const int p_z_reg_start=p_z+halo;
+  const int p_z_reg_start=p_z+NOCACHE_Z;
   const int p_z_sm_start=p_z+NOCACHE_Z + reg_folder_z;
   const int p_z_sm_end=p_z_sm_start+max_sm_flder;
   const int p_z_end = p_z + (blocksize_z);
   const int total_folder_z=max_sm_flder+reg_folder_z;
 
   const int boundary_east_step=0;
-  const int boundary_west_step=CACHE_TILE_Y*(total_folder_z);
+  const int boundary_west_step=CACHE_TILE_Y*(total_folder_z)*halo;
   const int boundary_step_yz=CACHE_TILE_Y*total_folder_z;
   // #define BD_STEP_XY (BD_TILE_Y*Halo)
 // #define BD_STEP_YZ (BD_TILE_Y*FOLDER_Z)
-  //global 2 cache
+  // global 2 reg cache  
+  _Pragma("unroll")
+  for(int cache_z=0; cache_z<reg_folder_z; cache_z++)
+  {
+    for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+    {
+      int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+      // if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y) continue;
+      // sm_space[cache_z*LOCAL_TILE_X*CACHE_TILE_Y+local_y*LOCAL_TILE_X+tid_x]
+      r_space[cache_z][l_y]
+        = input[(p_z_reg_start + cache_z)*width_x*width_y+(local_y+p_y)*width_x+p_x+tid_x];
+    }
+  }
+  // global 2 sm cache
   for(int cache_z=0; cache_z<max_sm_flder; cache_z++)
   {
-    for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+    for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
     {
-      int local_y=l_y+ITEM_PER_THREAD*tid_y;
+      int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
       if(local_y>=CACHE_TILE_Y) break;
       sm_space[cache_z*LOCAL_TILE_X*CACHE_TILE_Y+local_y*LOCAL_TILE_X+tid_x]
         = input[(p_z_sm_start + cache_z)*width_x*width_y+(local_y+NOCACHE_Y+p_y)*width_x+p_x+tid_x];
@@ -141,19 +154,69 @@ kernel3d_general(REAL * __restrict__ input,
                                           LOCAL_TILE_X, tid_x);
     __syncthreads();
     //normal
-                                          
-    for(int global_z=p_z; global_z<p_z_sm_start-halo; global_z+=1)
-    // for(int global_z=p_z; global_z<p_z_end; global_z+=1)
+    // // reg->global
+    _Pragma("unroll")
+    for(int global_z=p_z, cache_z_reg=0; global_z<p_z_reg_start; global_z+=1, cache_z_reg++)
     {
       __syncthreads();
       //in(global, halo+glboal_z)
+      // global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+      //                                   (input, smbuffer_buffer_ptr,
+      //                                     p_x, p_y, global_z,
+      //                                     width_x, width_y, width_z,
+      //                                     tile_x_with_halo, ps_x,
+      //                                     cpbase_y, cpend_y,ps_y,
+      //                                     LOCAL_TILE_X,tid_x);
+      
+
+       global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+                                        (input, smbuffer_buffer_ptr,
+                                          p_x, p_y, global_z,
+                                          width_x, width_y, width_z,
+                                          tile_x_with_halo, ps_x,
+                                          tid_y-halo, NOCACHE_Y,ps_y,
+                                          LOCAL_TILE_X,tid_x);
+
+
       global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
                                         (input, smbuffer_buffer_ptr,
                                           p_x, p_y, global_z,
                                           width_x, width_y, width_z,
                                           tile_x_with_halo, ps_x,
-                                          cpbase_y, cpend_y,ps_y,
-                                          LOCAL_TILE_X,tid_x);
+                                          tid_y-NOCACHE_Y+LOCAL_TILE_Y-1,
+                                          LOCAL_TILE_Y+halo, ps_y, 
+                                          LOCAL_TILE_X,
+                                          tid_x);      
+
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+        // if(local_y>=CACHE_TILE_Y-1) break;
+        if(local_y<NOCACHE_Y||local_y>=TILE_Y-NOCACHE_Y)
+        {
+          continue;
+        }
+        smbuffer_buffer_ptr[halo][(local_y+ps_y)*tile_x_with_halo+ps_x+tid_x]
+          // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
+          =  r_space[cache_z_reg][l_y];
+      }
+      for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y; l_y+=blockDim.x)
+      {
+        #pragma unroll
+        for(int l_x=0; l_x<halo; l_x++)
+        {
+          int global_x = p_x+LOCAL_TILE_X+l_x;
+          global_x = MIN(width_x-1,global_x);
+          //east
+          smbuffer_buffer_ptr[halo][(l_y+NOCACHE_Y+ps_y)*tile_x_with_halo+ps_x+l_x+LOCAL_TILE_X]
+            = boundary_buffer[boundary_east_step + (cache_z_reg) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+            // = input[(p_z+cache_z+(NOCACHE_Z))*width_x*width_y+(p_y+l_y+NOCACHE_Y)*width_x+global_x];
+            //west
+          smbuffer_buffer_ptr[halo][(l_y+NOCACHE_Y+ps_y)*tile_x_with_halo+ps_x-halo+l_x] 
+            = boundary_buffer[boundary_west_step + (cache_z_reg) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+        }
+      }
+      
       __syncthreads();
       //sm2reg
       sm2regs<REAL, LOCAL_ITEM_PER_THREAD, 1+2*halo, 
@@ -192,10 +255,129 @@ kernel3d_general(REAL * __restrict__ input,
       }
       smbuffer_buffer_ptr[halo]=tmp;
       regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
+    }    
+    // // reg->reg                    
+    _Pragma("unroll")   
+    // for(int global_z=p_z; global_z<p_z_sm_start-halo; global_z+=1)
+    for(int global_z=p_z_reg_start,cache_z_reg=halo; global_z<p_z_sm_start-halo; global_z+=1,cache_z_reg++)
+    {
+      __syncthreads();
+      //in(global, halo+glboal_z)
+      // global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+      //                                   (input, smbuffer_buffer_ptr,
+      //                                     p_x, p_y, global_z,
+      //                                     width_x, width_y, width_z,
+      //                                     tile_x_with_halo, ps_x,
+      //                                     cpbase_y, cpend_y,ps_y,
+      //                                     LOCAL_TILE_X,tid_x);
+      global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+                                        (input, smbuffer_buffer_ptr,
+                                          p_x, p_y, global_z,
+                                          width_x, width_y, width_z,
+                                          tile_x_with_halo, ps_x,
+                                          tid_y-halo, NOCACHE_Y,ps_y,
+                                          LOCAL_TILE_X,tid_x);
+
+
+      global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+                                        (input, smbuffer_buffer_ptr,
+                                          p_x, p_y, global_z,
+                                          width_x, width_y, width_z,
+                                          tile_x_with_halo, ps_x,
+                                          tid_y-NOCACHE_Y+LOCAL_TILE_Y-1,
+                                          LOCAL_TILE_Y+halo, ps_y, 
+                                          LOCAL_TILE_X,
+                                          tid_x);      
+
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+        // if(local_y>=CACHE_TILE_Y-1) break;
+        if(local_y<NOCACHE_Y||local_y>=TILE_Y-NOCACHE_Y)
+        {
+          continue;
+        }
+        smbuffer_buffer_ptr[halo][(local_y+ps_y)*tile_x_with_halo+ps_x+tid_x]
+          // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
+          =  r_space[cache_z_reg][l_y];
+      }
+      for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y; l_y+=blockDim.x)
+      {
+        #pragma unroll
+        for(int l_x=0; l_x<halo; l_x++)
+        {
+          int global_x = p_x+LOCAL_TILE_X+l_x;
+          global_x = MIN(width_x-1,global_x);
+          //east
+          smbuffer_buffer_ptr[halo][(l_y+NOCACHE_Y+ps_y)*tile_x_with_halo+ps_x+l_x+LOCAL_TILE_X]
+            = boundary_buffer[boundary_east_step + (cache_z_reg) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+            // = input[(p_z+cache_z+(NOCACHE_Z))*width_x*width_y+(p_y+l_y+NOCACHE_Y)*width_x+global_x];
+            //west
+          smbuffer_buffer_ptr[halo][(l_y+NOCACHE_Y+ps_y)*tile_x_with_halo+ps_x-halo+l_x] 
+            = boundary_buffer[boundary_west_step + (cache_z_reg) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+        }
+      }
+      
+      __syncthreads();
+      //sm2reg
+      sm2regs<REAL, LOCAL_ITEM_PER_THREAD, 1+2*halo, 
+                1+halo, halo, 0, halo*2, 
+                LOCAL_ITEM_PER_THREAD, 1>
+        (smbuffer_buffer_ptr, r_smbuffer, 
+          ps_y+index_y, ps_x, 
+          tile_x_with_halo, tid_x);
+      REAL sum[LOCAL_ITEM_PER_THREAD];
+      // #pragma unroll
+      _Pragma("unroll")
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        sum[l_y]=0;
+      }
+      //main computation
+      computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
+                                      smbuffer_buffer_ptr[0],
+                                      ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
+                                      r_smbuffer,
+                                      stencilParaInput);
+      // reg 2 ptr
+      // out(global, global_z)
+      // reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
+      //       sum, output,
+      //       global_z, width_z,
+      //       p_y+index_y, width_y,
+      //       p_x, width_x,
+      //       tid_x);
+
+      _Pragma("unroll")
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+        // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+        if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
+        {
+          output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          continue;
+        }
+        // r_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x]
+        r_space[cache_z_reg-halo][l_y] = sum[l_y];
+      }
+
+      REAL* tmp = smbuffer_buffer_ptr[0];
+      // smswap 
+      _Pragma("unroll")
+      for(int hl=1; hl<halo+1; hl++)
+      {
+        smbuffer_buffer_ptr[hl-1]=smbuffer_buffer_ptr[hl];
+      }
+      smbuffer_buffer_ptr[halo]=tmp;
+      regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
     }
-    // sm -> global
-    // halo in(sm, halo,halo*2) out(global, 0, halo)
-    for(int global_z=p_z_sm_start-halo, cache_z=0; global_z<p_z_sm_start; global_z+=1, cache_z++)
+    // // sm -> global (reg)
+    // // halo in(sm, halo,halo*2) out(global, 0, halo)
+    // _Pragma("unroll")
+    for(int global_z=p_z_sm_start-halo, cache_z=0, cache_z_reg=reg_folder_z; global_z<p_z_sm_start; global_z+=1, cache_z++,cache_z_reg++)
+    // for(int global_z=p_z; global_z<p_z_sm_start; global_z+=1)
     {
       __syncthreads();
       //in(global, halo+glboal_z)
@@ -226,9 +408,9 @@ kernel3d_general(REAL * __restrict__ input,
                                           tid_x);                      
       // __syncthreads();
       // // // cached region
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
-        int local_y=l_y+ITEM_PER_THREAD*tid_y;
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
         // if(local_y>=CACHE_TILE_Y-1) break;
         if(local_y<NOCACHE_Y||local_y>=TILE_Y-NOCACHE_Y)
         {
@@ -274,12 +456,28 @@ kernel3d_general(REAL * __restrict__ input,
                                       stencilParaInput);
       // reg 2 ptr
       // out(global, global_z)
-      reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
-            sum, output,
-            global_z, width_z,
-            p_y+index_y, width_y,
-            p_x, width_x,
-            tid_x);
+      // reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
+      //       sum, output,
+      //       global_z, width_z,
+      //       p_y+index_y, width_y,
+      //       p_x, width_x,
+      //       tid_x);
+
+      _Pragma("unroll")
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+        // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+        if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
+        {
+          output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          continue;
+        }
+        // r_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x]
+        r_space[cache_z_reg-halo][l_y] = sum[l_y];
+      }            
+      
       REAL* tmp = smbuffer_buffer_ptr[0];
       // smswap 
       _Pragma("unroll")
@@ -290,9 +488,10 @@ kernel3d_general(REAL * __restrict__ input,
       smbuffer_buffer_ptr[halo]=tmp;
       regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
     }
-    // // // sm->sm
+    // // // // sm->sm
     // // // in(sm, halo*2, cache_sm_end) out(sm, halo, cache_sm_end-halo)
     for(int global_z=p_z_sm_start, cache_z=halo; global_z<p_z_sm_end-halo; global_z+=1, cache_z++)
+    // for(int global_z=p_z, cache_z=halo; global_z<p_z_sm_end-halo; global_z+=1, cache_z++)
     {
       __syncthreads();
       //in(global, halo+glboal_z)
@@ -324,9 +523,9 @@ kernel3d_general(REAL * __restrict__ input,
                                           tid_x);                         
       // // cached region
       // __syncthreads();
-      for(int l_y=0; l_y<ITEM_PER_THREAD; l_y++)
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
-        int local_y=l_y+ITEM_PER_THREAD*tid_y;
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
         if(local_y>=CACHE_TILE_Y) break;
         smbuffer_buffer_ptr[halo][(local_y+halo+ps_y)*tile_x_with_halo+ps_x+tid_x]
           // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
@@ -392,12 +591,12 @@ kernel3d_general(REAL * __restrict__ input,
       _Pragma("unroll")
       for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
-        int local_y=l_y+ITEM_PER_THREAD*tid_y;
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
         // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
         if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
         {
           output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-          // output[global_z*width_x*width_y+(p_y+ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
           continue;
         }
         sm_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x]
@@ -414,12 +613,12 @@ kernel3d_general(REAL * __restrict__ input,
       smbuffer_buffer_ptr[halo]=tmp;
       regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
     }
-    // // // // global->sm
-    // // // // in(global, cache_sm_end, cache_sm_end+halo) out(cache_sm_start, cache_sm_end-halo, cache_sm_end)
+    // // // // // global->sm
+    // // // // // in(global, cache_sm_end, cache_sm_end+halo) out(cache_sm_start, cache_sm_end-halo, cache_sm_end)
     
     // // // for(int global_z=p_z_sm_start, cache_z=halo; global_z<p_z_sm_end; global_z+=1, cache_z++)
     for(int global_z=p_z_sm_end-halo, cache_z=max_sm_flder; global_z<p_z_sm_end; global_z+=1, cache_z++)
-    // for(int global_z=p_z+3; global_z<p_z_sm_end; global_z+=1)
+    // for(int global_z=p_z; global_z<p_z_sm_end; global_z+=1)
     {
       __syncthreads();
       //in(global, halo+glboal_z)
@@ -459,22 +658,16 @@ kernel3d_general(REAL * __restrict__ input,
       //       p_y+index_y, width_y,
       //       p_x, width_x,
       //       tid_x);
-      // _Pragma("unroll")
-      // for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
-      // {
-      //   int local_y=l_y+index_y;
-      //   output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-      // }
-
+            
       _Pragma("unroll")
       for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
-        int local_y=l_y+ITEM_PER_THREAD*tid_y;
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
         // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
         if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
         {
           output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-          // output[global_z*width_x*width_y+(p_y+ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
           continue;
         }
         sm_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x]
@@ -493,7 +686,7 @@ kernel3d_general(REAL * __restrict__ input,
     // general version
     // in(global, cache_sm_end+halo, p_z_end+halo) out(global, cache_sm_end, p_z_end) 
     for(int global_z=p_z_sm_end; global_z<p_z_end; global_z+=1)
-    // for(int global_z=p_z_sm_start; global_z<p_z_end; global_z+=1)
+    // for(int global_z=p_z; global_z<p_z_end; global_z+=1)
     {
       __syncthreads();
       //in(global, halo+glboal_z)
@@ -543,7 +736,70 @@ kernel3d_general(REAL * __restrict__ input,
       smbuffer_buffer_ptr[halo]=tmp;
       regsself3d<REAL,2*halo+1,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
     }
-   
+    _Pragma("unroll")
+    for(int l_z=0; l_z<reg_folder_z; l_z++)
+    {
+      // for(int l_x=tid; l_x<halo; l_x++)
+      
+      if(tid_x>=LOCAL_TILE_X-halo)
+      {
+        
+        int l_x=tid_x-LOCAL_TILE_X+halo;
+        // for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y;l_y+=blockDim.x)
+        for(int l_y=0; l_y<ITEM_PER_THREAD;l_y+=1)
+        {
+          int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+          // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+          if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
+          {
+            // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+            // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+            continue;
+          }
+          //east
+          boundary_buffer[boundary_east_step + (l_z) * CACHE_TILE_Y + (local_y-halo) + l_x * boundary_step_yz]
+          =
+          r_space[l_z][l_y];
+          // sm_space[l_z*(CACHE_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+LOCAL_TILE_X-halo+l_x];
+
+          // //west
+          // boundary_buffer[boundary_west_step + (l_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz]
+          // =
+          // r_space[l_z][l_y];
+          // sm_space[l_z*(CACHE_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
+        }
+      }
+
+      if(tid_x<halo)
+      {
+        int l_x=tid_x;
+        // for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y;l_y+=blockDim.x)
+        // for(int l_y=NOCACHE_Y; l_y<ITEM_PER_THREAD-NOCACHE_Y;l_y+=1)
+        for(int l_y=0; l_y<ITEM_PER_THREAD;l_y+=1)
+        {
+          int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+          // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+          if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
+          {
+            // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+            // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+            continue;
+          }
+          //east
+          // boundary_buffer[boundary_east_step + (l_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz]
+          // =
+          // r_space[l_z][l_y];
+          // sm_space[l_z*(CACHE_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+LOCAL_TILE_X-halo+l_x];
+
+          //west
+          boundary_buffer[boundary_west_step + (l_z) * CACHE_TILE_Y + (local_y-halo) + l_x * boundary_step_yz]
+          =
+          r_space[l_z][l_y];
+          // sm_space[l_z*(CACHE_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
+        }
+      }
+    }
+
     //sm
     for(int l_z=0; l_z<max_sm_flder; l_z++)
     {
@@ -681,32 +937,35 @@ kernel3d_general(REAL * __restrict__ input,
     }
   }
 
-   
-  // for(int cache_z=0; cache_z<max_sm_flder; cache_z++)
-  for(int global_z=p_z_sm_start, cache_z=halo; global_z<p_z_sm_end; global_z+=1, cache_z++)
+  for(int global_z=p_z_reg_start, cache_z_reg=halo; global_z<p_z_sm_start; global_z+=1, cache_z_reg++)
   {
-
-      // _Pragma("unroll")
-      // for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
-      // {
-      //   int local_y=l_y+ITEM_PER_THREAD*tid_y;
-      //   if(local_y<NOCACHE_Y&&local_y>=LOCAL_TILE_Y-NOCACHE_Y)
-      //   {
-      //     continue;
-      //   }
-      //   output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=
-      //     sm_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x];
-
-      // }   
       _Pragma("unroll")
       for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
       {
-        int local_y=l_y+ITEM_PER_THREAD*tid_y;
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
         // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
         if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
         {
           // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-          // output[global_z*width_x*width_y+(p_y+ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
+          continue;
+        }
+        output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]  = r_space[cache_z_reg-halo][l_y];
+          // sm_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x];
+      }  
+      // break; 
+  } 
+  for(int global_z=p_z_sm_start, cache_z=halo; global_z<p_z_sm_end; global_z+=1, cache_z++)
+  {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
+      {
+        int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
+        // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+        if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
+        {
+          // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
+          // output[global_z*width_x*width_y+(p_y+LOCAL_ITEM_PER_THREAD*tid_y+l_y)*width_x+p_x+tid_x]=sum[l_y];
           continue;
         }
         output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]  =
@@ -727,7 +986,7 @@ template __global__ void kernel3d_general<float,HALO,ITEM_PER_THREAD,TILE_X,TILE
 
 template __global__ void kernel3d_general<float,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true> 
     (float *__restrict__, float *__restrict__ , int , int , int, float*,float*,int,int);
-    // template __global__ void kernel3d_general<double,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y> 
+    // template __global__ void kernel3d_general<double,HALO,LOCAL_ITEM_PER_THREAD,TILE_X,TILE_Y> 
 //     (double *__restrict__, double *__restrict__ , int , int , int , double*,double*,int,int);
 
 // #ifndef PERSISTENT 
