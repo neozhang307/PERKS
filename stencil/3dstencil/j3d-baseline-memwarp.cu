@@ -158,7 +158,7 @@ __global__ void kernel3d_baseline_memwarp(REAL * __restrict__ input,
 
       //main computation
       computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
-                                      smbuffer_buffer_ptr[0],
+                                      smbuffer_buffer_ptr,
                                       ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
                                       r_smbuffer,
                                       stencilParaInput);

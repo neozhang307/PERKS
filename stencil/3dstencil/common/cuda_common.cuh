@@ -92,7 +92,9 @@ __device__ void __forceinline__ reg2global3d(
 
 
 
-template<class REAL, int REG_SIZE_Y, int REG_SIZE_Z, int BASE_Y=0, int BASE_Z=0, int SIZE_Y=REG_SIZE_Y, int SIZE_Z=REG_SIZE_Z>
+template<class REAL,int REG_SIZE_Z, int REG_SIZE_Y, 
+                        int BASE_Z=0,  int BASE_Y=0, 
+                        int SIZE_Z=REG_SIZE_Z, int SIZE_Y=REG_SIZE_Y>
 __device__ void __forceinline__ global2regs3d(
   REAL*src, REAL reg_array[REG_SIZE_Z][REG_SIZE_Y],
   int global_z, int width_z,
@@ -174,6 +176,27 @@ __device__ void __forceinline__ regsself3d(
   }
 }
 
+template<class REAL, int SIZE_Z, int SIZE_Y, int SIZE_X>
+__device__ void __forceinline__ regsself3d(
+  REAL reg_array[SIZE_Z][SIZE_Y][SIZE_X])
+{
+  _Pragma("unroll")
+  for(int l_z=0; l_z<SIZE_Z-1 ; l_z++)
+  { 
+    // int l_z=0; 
+    _Pragma("unroll")
+    for(int l_y=0; l_y<SIZE_Y; l_y++)
+    {
+      _Pragma("unroll")
+      for(int l_x=0; l_x<SIZE_X ; l_x++)
+      { 
+        reg_array[l_z][l_y][l_x] = reg_array[l_z+1][l_y][l_x];
+      }
+    }
+  }
+}
+
+
 template<class REAL, int halo, bool isInit=false, bool sync=true>
 __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer, 
                                               int size, 
@@ -239,7 +262,7 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
   #undef dst_ind
 }
 
-template<class REAL, int halo, int BASE_Z, int SIZE_Z, int SMSIZE, int SM_BASE=0, bool isInit=false, bool sync=true>
+template<class REAL, int halo, int BASE_Z, int SIZE_Z, int SMSIZE, int SM_BASE_Z=BASE_Z, bool isInit=false, bool sync=true>
 __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[SMSIZE],
                                           int gbase_x, int gbase_y, int gbase_z,
                                           int width_x, int width_y, int width_z,
@@ -257,12 +280,12 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
     {
       int l_global_y = (MIN(gbase_y+l_y,width_y-1));
         l_global_y = (MAX(l_global_y,0));
-        smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
+        smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
             src[l_global_z*width_x*width_y+l_global_y*width_x+
             MAX((gbase_x+tid_x-halo),0)];
       if(tid_x<halo*2)
       {
-          smbuffer_buffer_ptr[l_z+BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
+          smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
               src[l_global_z*width_x*width_y+l_global_y*width_x+
                 MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
       }

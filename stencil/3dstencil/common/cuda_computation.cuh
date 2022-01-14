@@ -22,6 +22,10 @@
 
 #define TILE_X (64)
 #define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
+
+#define NOCACHE_Y (HALO)
+#define NOCACHE_Z (HALO)
+#define CACHE_TILE_Y (TILE_Y-2*NOCACHE_Y)
 // (32)
 
 // #define RTILE_Z (1)
@@ -66,8 +70,10 @@
         const REAL bottom[2]={0.083f,0.083f};\
         const REAL top[2]={0.083f,0.083f};
     #endif
+    #define isBOX (0)
     #define stencilParaList const REAL west[HALO],const REAL east[HALO],const REAL north[HALO],const REAL south[HALO],const REAL top[HALO], const REAL bottom[HALO], const REAL center
     #define stencilParaInput  west,east,north,south,top,bottom,center
+    #define REG_Y_SIZE_MOD (ITEM_PER_THREAD)
 #else
   #ifndef TYPE0
     #define stencilParaT \
@@ -121,18 +127,25 @@
     #endif
   #endif
   
-  #define stencilParaList const REAL filter[halo*2+1][halo*2+1]
+  #define stencilParaList const REAL filter[halo*2+1][halo*2+1][halo*2+1]
   #define stencilParaInput  filter
+  #define isBOX (HALO)
+  #define REG_Y_SIZE_MOD (1+2*halo)
 #endif
 
 
-template<class REAL, int RESULT_SIZE, int halo, int REGZ_SIZE=2*halo+1, int REG_BASE=halo>
+template<class REAL, int RESULT_SIZE, int halo, int SMZ_SIZE=halo+1+isBOX, int REGZ_SIZE=2*halo+1, int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1, int REG_BASE=halo>
 __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
-                                            REAL* sm_ptr, 
+                                            REAL* sm_ptr[SMZ_SIZE], 
                                             int sm_y_base, int sm_width, int sm_x_ind,
+#ifndef BOX
                                             REAL reg_ptr[REGZ_SIZE][RESULT_SIZE],
+#else
+                                            REAL reg_ptr[REGZ_SIZE][REGY_SIZE][REGX_SIZE],
+#endif                                  
                                             stencilParaList)
 {
+  #ifndef BOX
   {
     _Pragma("unroll")
     for(int l_y=0; l_y<RESULT_SIZE; l_y++)
@@ -141,7 +154,7 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
       for(int hl=0; hl<halo; hl++)
       {
         result[l_y]+=west[hl]*
-              sm_ptr[sm_width*(l_y+sm_y_base) + sm_x_ind-1-hl];
+              sm_ptr[0][sm_width*(l_y+sm_y_base) + sm_x_ind-1-hl];
       }
     }
     _Pragma("unroll")
@@ -151,7 +164,7 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
       for(int hl=0; hl<halo; hl++)
       {
         result[l_y]+=east[hl]*
-          sm_ptr[sm_width*(l_y+sm_y_base) + sm_x_ind+1+hl];
+          sm_ptr[0][sm_width*(l_y+sm_y_base) + sm_x_ind+1+hl];
       }
     }
     _Pragma("unroll")
@@ -161,7 +174,7 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
       for(int hl=0; hl<halo; hl++)
       {
         result[l_y]+=north[hl]*
-          sm_ptr[sm_width*(l_y+sm_y_base+1+hl) + sm_x_ind];
+          sm_ptr[0][sm_width*(l_y+sm_y_base+1+hl) + sm_x_ind];
       }
     }
     _Pragma("unroll")
@@ -171,7 +184,7 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
       for(int hl=0; hl<halo; hl++)
       {
         result[l_y]+=south[hl]*
-          sm_ptr[sm_width*(l_y+sm_y_base-1-hl) + sm_x_ind];
+          sm_ptr[0][sm_width*(l_y+sm_y_base-1-hl) + sm_x_ind];
       }
     }
     _Pragma("unroll")
@@ -190,6 +203,66 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
   {
     result[l_y]+=center*reg_ptr[REG_BASE][l_y];
   }
+  #else
+
+   _Pragma("undroll")
+    for(int l_y=0; l_y<2*halo; l_y++)
+    {
+      for(int l_z=0; l_z<2*halo+1; l_z++)
+      {
+        for(int l_x=0; l_x<2*halo+1; l_x++)
+        {
+          reg_ptr[l_z][l_y][l_x]
+            = 
+            sm_ptr[(l_z)][sm_width*(l_y+sm_y_base-halo) + sm_x_ind-halo+l_x];
+            
+        }
+      }
+    }
+    for(int l_y=0; l_y<RESULT_SIZE; l_y++)
+    {
+      // for(int h_y=0; h_y<3; h_y++)
+      {
+        int h_y=2*halo;
+        for(int h_z=0; h_z<2*halo+1; h_z++)
+        {
+          for(int h_x=0; h_x<2*halo+1; h_x++)
+          {
+            reg_ptr[h_z][h_y][h_x]
+              = 
+              sm_ptr[(h_z)][sm_width*(l_y + h_y+ sm_y_base-halo) + sm_x_ind-halo+h_x];
+              // smbuffer_buffer_ptr[(h_z+halo)][tile_x_with_halo*(l_y + h_y-halo+ps_y+index_y) + tid_x+ps_x+h_x];
+          }
+        }
+      }
+      
+      _Pragma("unroll")
+      for(int hl_z=-halo; hl_z<halo+1; hl_z++)
+      {
+        _Pragma("unroll")
+        for(int hl_y=-halo; hl_y<halo+1; hl_y++)
+        {
+          _Pragma("unroll")
+          for(int hl_x=-halo; hl_x<halo+1; hl_x++)
+          {
+            result[l_y]+=filter[hl_z+halo][hl_y+halo][hl_x+halo]*reg_ptr[hl_z+halo][hl_y+halo][hl_x+halo];
+          }
+        }
+      }
+      for(int l_y=0; l_y<2*halo; l_y++)
+      {
+        for(int l_z=0; l_z<2*halo+1; l_z++)
+        {
+          for(int l_x=0; l_x<2*halo+1; l_x++)
+          {
+            reg_ptr[l_z][l_y][l_x]=reg_ptr[l_z][l_y+1][l_x];
+          }
+        }
+      }
+    }
+
+
+  #endif
 }
 
 
@@ -223,12 +296,12 @@ __global__ void kernel3d_persistent(REAL* __restrict__ input, REAL*__restrict__ 
 
 
 
-template<class REAL, int halo, int ipt, int tilex, int tiley>
+template<class REAL, int halo, int ipt, int tilex, int tiley, int reg_folder_z=0, bool UseSMCache=false>
 __global__ void kernel3d_general(REAL* __restrict__ input, REAL*__restrict__ output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
-                                  int iteration); 
-#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,tiley) \
-    __global__ void kernel3d_general<_type,halo,ipt,tilex,tiley>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int);
+                                  int iteration, int max_sm_flder=0); 
+#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,tiley,regf,usesm) \
+    __global__ void kernel3d_general<_type,halo,ipt,tilex,tiley,regf,usesm>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
 
 
