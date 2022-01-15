@@ -159,7 +159,7 @@ kernel3d_general(REAL * __restrict__ input,
                                           p_x, p_y, p_z,
                                           width_x, width_y, width_z,
                                           tile_x_with_halo, ps_x,
-                                          cpbase_y, cpend_y,ps_y,
+                                          cpbase_y, cpend_y, 1,ps_y,
                                           LOCAL_TILE_X, tid_x);
     __syncthreads();
     // //normal
@@ -689,6 +689,7 @@ template __global__ void kernel3d_general<float,HALO,ITEM_PER_THREAD,TILE_X,TILE
 
 template __global__ void kernel3d_general<float,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true> 
     (float *__restrict__, float *__restrict__ , int , int , int, float*,float*,int,int);
+
     // template __global__ void kernel3d_general<double,HALO,LOCAL_ITEM_PER_THREAD,TILE_X,TILE_Y> 
 //     (double *__restrict__, double *__restrict__ , int , int , int , double*,double*,int,int);
 

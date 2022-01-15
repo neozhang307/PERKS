@@ -61,7 +61,7 @@ __device__ void __forceinline__ process_one_layer
                                           width_x, width_y, width_z,
                                           // tile_x_with_halo
                                           sm_width_x, ps_x,
-                                          cpbase_y, cpend_y,ps_y,
+                                          cpbase_y, cpend_y,1,ps_y,
                                           LOCAL_TILE_X,tid_x);
   }
   else
@@ -75,26 +75,54 @@ __device__ void __forceinline__ process_one_layer
     //                                       cpbase_y, cpend_y,ps_y,
     //                                       LOCAL_TILE_X,tid_x);
 
-    // global2sm<REAL, halo, halo, 1, halo+1, 0, false, false>
-    global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, false>
-                                      (input, smbuffer_buffer_ptr,
-                                        p_x, p_y, global_z,
-                                        width_x, width_y, width_z,
-                                        sm_width_x, ps_x,
-                                        tid_y-halo, LOCAL_NOCACHE_Y,ps_y,
-                                        LOCAL_TILE_X,tid_x);
+    // for(int l_z=0; l_z<1; l_z++)
+    {
+      // int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
+      // int l_global_z = (MIN(global_z+1,width_z-1));
+      int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
+      // _Pragma("unroll")
+      for(int l_y=tid_y-halo; l_y<LOCAL_NOCACHE_Y; l_y+=bdimx/TILE_X)
+      {
+        int l_global_y = (MIN(p_y+l_y,width_y-1));
+          l_global_y = (MAX(l_global_y,0));
+          smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x-halo) + ps_x]=
+              input[l_global_z*width_x*width_y+l_global_y*width_x+
+              MAX((p_x+tid_x-halo),0)];
+        if(tid_x<halo*2)
+        {
+            smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
+                input[l_global_z*width_x*width_y+l_global_y*width_x+
+                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
+        }
+      }
+    }
 
+    // for(int l_z=0; l_z<1; l_z++)
+    {
+      // int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
+      // int l_global_z = (MIN(global_z+1,width_z-1));
+      int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
+      // _Pragma("unroll")
+      for(int l_y=tid_y-LOCAL_NOCACHE_Y+LOCAL_TILE_Y-1; l_y<LOCAL_TILE_Y+halo; l_y+=bdimx/TILE_X)
+      {
+        int l_global_y = (MIN(p_y+l_y,width_y-1));
+          l_global_y = (MAX(l_global_y,0));
+          smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x-halo) + ps_x]=
+              input[l_global_z*width_x*width_y+l_global_y*width_x+
+              MAX((p_x+tid_x-halo),0)];
+        if(tid_x<halo*2)
+        {
+            smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
+                input[l_global_z*width_x*width_y+l_global_y*width_x+
+                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
+        }
+      }
+    }
 
-    // global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
-    global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
-                                      (input, smbuffer_buffer_ptr,
-                                        p_x, p_y, global_z,
-                                        width_x, width_y, width_z,
-                                        sm_width_x, ps_x,
-                                        tid_y-LOCAL_NOCACHE_Y+LOCAL_TILE_Y-1,
-                                        LOCAL_TILE_Y+halo, ps_y, 
-                                        LOCAL_TILE_X,
-                                        tid_x);                         
+    
+
+    __syncthreads();
+                 
     // // cached region
     // __syncthreads();
     for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
@@ -118,6 +146,7 @@ __device__ void __forceinline__ process_one_layer
           =  r_space[frmcacheregid_z][l_y];
       }
     }
+    // __syncthreads();
     // east west
     for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y; l_y+=blockDim.x)
     {

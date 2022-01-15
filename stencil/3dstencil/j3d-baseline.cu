@@ -52,9 +52,9 @@ kernel3d_persistent(REAL * __restrict__ input,
   }
   const int tid_x = threadIdx.x%LOCAL_TILE_X;
   const int tid_y = threadIdx.x/LOCAL_TILE_X;
-  const int dim_y = LOCAL_TILE_Y/LOCAL_ITEM_PER_THREAD;
-  const int cpblocksize_y=(LOCAL_TILE_Y+2*halo)/dim_y;
-  const int cpquotion_y=(LOCAL_TILE_Y+2*halo)%dim_y;
+  const int gdim_y = LOCAL_TILE_Y/LOCAL_ITEM_PER_THREAD;
+  const int cpblocksize_y=(LOCAL_TILE_Y+2*halo)/gdim_y;
+  const int cpquotion_y=(LOCAL_TILE_Y+2*halo)%gdim_y;
   const int index_y = LOCAL_ITEM_PER_THREAD*tid_y;
   const int cpbase_y = -halo+tid_y*cpblocksize_y+(tid_y<=cpquotion_y?tid_y:cpquotion_y);
   const int cpend_y = cpbase_y + cpblocksize_y + (tid_y<=cpquotion_y?1:0);
@@ -86,7 +86,7 @@ kernel3d_persistent(REAL * __restrict__ input,
 
                                           tile_x_with_halo, ps_x,
                                           // -halo+index_y, -halo+index_y+LOCAL_ITEM_PER_THREAD+2*halo, ps_y,
-                                          cpbase_y, cpend_y,ps_y,
+                                          cpbase_y, cpend_y, 1, ps_y,
                                           // cpsize_y, ps_y,cpbase_y, 
                                           LOCAL_TILE_X, tid_x);
     // // __syncthreads();
@@ -97,7 +97,7 @@ kernel3d_persistent(REAL * __restrict__ input,
                                             p_x, p_y, global_z,
                                             width_x, width_y, width_z,
                                             tile_x_with_halo, ps_x,
-                                            cpbase_y, cpend_y,ps_y,
+                                            cpbase_y, cpend_y, 1, ps_y,
                                             LOCAL_TILE_X,tid_x);
       #ifndef BOX
         //sm2reg

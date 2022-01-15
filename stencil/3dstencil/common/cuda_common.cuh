@@ -267,7 +267,7 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
                                           int gbase_x, int gbase_y, int gbase_z,
                                           int width_x, int width_y, int width_z,
                                           int sm_width_x, int sm_base_x,
-                                          int y_start, int y_end , int sm_base_y,
+                                          int y_start, int y_end , int y_step,int sm_base_y,
                                           int tile_x, int tid_x)
 {
   _Pragma("unroll")
@@ -276,7 +276,7 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
     int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
         l_global_z = (MIN(l_global_z,width_z-1));
     // _Pragma("unroll")
-    for(int l_y=y_start; l_y<y_end; l_y+=1)
+    for(int l_y=y_start; l_y<y_end; l_y+=y_step)
     {
       int l_global_y = (MIN(gbase_y+l_y,width_y-1));
         l_global_y = (MAX(l_global_y,0));

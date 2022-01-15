@@ -5,6 +5,7 @@
 // #include "./common/cuda_computation.cuh"
 // #include "./common/cuda_common.cuh"
 // #include "./common/types.hpp"
+#include "genconfig.cuh"
 #ifdef _TIMER_
 #include "cuda_profiler_api.h"
 #endif
@@ -90,13 +91,16 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
   auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef GEN
-  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,0,true>;
+  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true>;
+  // auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,0,true>;
+  // auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,0,false>;
+  // auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,false>;
 #endif
 
 //shared memory related 
 size_t executeSM=0;
 #ifndef NAIVE
-    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+2*HALO)+1)*sizeof(REAL);
+    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+HALO+isBOX)+1)*sizeof(REAL);
     executeSM=basic_sm_space;
 #endif
 printf("sm is %ld\n",executeSM);
@@ -162,8 +166,8 @@ printf("sm is %ld\n",executeSM);
 #if defined(GEN)
 
   
-  int reg_folder_z=0;
-  max_sm_flder=4;
+  int reg_folder_z=REG_FOLDER_Z;
+  max_sm_flder=2;
   
   int sharememory1 = 2*(CACHE_TILE_Y)*(max_sm_flder+reg_folder_z)*sizeof(REAL);
   int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(CACHE_TILE_Y)*TILE_X;

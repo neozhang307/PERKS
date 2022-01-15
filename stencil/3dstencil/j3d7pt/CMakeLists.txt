@@ -107,27 +107,22 @@ endfunction()
 mylib("${type}_baseline" "${CMAKE_SOURCE_DIR}/j3d-baseline.cu" "${DEFAULT_COMPILER_FLAG}  ")
 set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
-mylib("${type}_baseline_memwarp" "${CMAKE_SOURCE_DIR}/j3d-baseline-memwarp.cu" "${DEFAULT_COMPILER_FLAG}  ")
-set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
+# mylib("${type}_baseline_memwarp" "${CMAKE_SOURCE_DIR}/j3d-baseline-memwarp.cu" "${DEFAULT_COMPILER_FLAG}  ")
+# set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
+
+# mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/j3d-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT ")
+# set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
+
+mylib("${type}_general" "${CMAKE_SOURCE_DIR}/j3d-general.cu" "${DEFAULT_COMPILER_FLAG} ")
+set_target_properties("${type}_general" PROPERTIES CUDA_ARCHITECTURES "70;80")
+
 
 # # subcompile(${type} )
 # subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_naive" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "BASELINE_MEMWARP" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline_memwarp" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "BASELINE_MEMWARP" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline_memwarp" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_persistent" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "GEN" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_general" )
 
-
-
-# add_library("${type}_naive" "${CMAKE_SOURCE_DIR}/j3d-naive.cu")
-# set_target_properties("${type}_naive" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# set_target_properties("${type}_naive" PROPERTIES COMPILE_FLAGS "${DEFAULT_COMPILER_FLAG}")
-
-# set(libraryname "${type}_jacobi_naive")
-# add_library(${libraryname}  "${CMAKE_SOURCE_DIR}/j3d.cu")
-# set_target_properties(${libraryname} PROPERTIES CUDA_ARCHITECTURES "70;80")
-# set_target_properties(${libraryname} PROPERTIES COMPILE_FLAGS "${DEFAULT_COMPILER_FLAG} -DNAIVE")
-
-# set(local_goal "${type}_naive.exe")
-# add_executable(${local_goal} "${CMAKE_SOURCE_DIR}/j3d.driver.cpp")
-# # set_target_properties("${local_goal}" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# target_link_libraries(${local_goal} PUBLIC ${libraryname} ${type}_jacobi_gold_gen ${type}_jacobi_gold ${type}_naive )
 
