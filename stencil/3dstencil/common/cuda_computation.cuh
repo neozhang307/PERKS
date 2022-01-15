@@ -17,10 +17,11 @@
 
 #define bdimx (256)
 
+// #define ITEM_PER_THREAD (8) 
 #define ITEM_PER_THREAD (8) 
 // (TILE_Y/(bdimx/TILE_X))
 
-#define TILE_X (64)
+#define TILE_X (32)
 #define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
 
 #define NOCACHE_Y (HALO)
@@ -204,7 +205,7 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
     result[l_y]+=center*reg_ptr[REG_BASE][l_y];
   }
   #else
-
+    // register REAL reg_ptr[REGZ_SIZE][REGY_SIZE][REGX_SIZE];
    _Pragma("undroll")
     for(int l_y=0; l_y<2*halo; l_y++)
     {
@@ -245,7 +246,9 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
           _Pragma("unroll")
           for(int hl_x=-halo; hl_x<halo+1; hl_x++)
           {
-            result[l_y]+=filter[hl_z+halo][hl_y+halo][hl_x+halo]*reg_ptr[hl_z+halo][hl_y+halo][hl_x+halo];
+            result[l_y]+=filter[hl_z+halo][hl_y+halo][hl_x+halo]*
+              // sm_ptr[hl_z+halo][sm_width*(l_y+halo + hl_y+ sm_y_base-halo) + sm_x_ind-halo+hl_x+halo];
+              reg_ptr[hl_z+halo][hl_y+halo][hl_x+halo];
           }
         }
       }

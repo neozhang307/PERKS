@@ -20,13 +20,19 @@ namespace cg = cooperative_groups;
 template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y, int LOCAL_NOCACHE_Y, int SM_SIZE_Z, int REG_SIZE_Z,
           int REG_CACHESIZE_Z=1,          
           bool loadfrmcache=false, bool storetocache=false,
-          bool isloadfrmreg=false, bool isstoretoreg=false>
+          bool isloadfrmreg=false, bool isstoretoreg=false,
+          int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1>
 __device__ void __forceinline__ process_one_layer 
       (
         REAL * __restrict__ input, REAL * __restrict__ output, 
-        REAL* smbuffer_buffer_ptr[SM_SIZE_Z], 
-        REAL r_smbuffer[REG_SIZE_Z][LOCAL_ITEM_PER_THREAD],
+        REAL* smbuffer_buffer_ptr[SM_SIZE_Z],
 
+        // REAL r_smbuffer[REG_SIZE_Z][LOCAL_ITEM_PER_THREAD],
+#ifndef BOX
+        REAL r_smbuffer[REG_SIZE_Z][LOCAL_ITEM_PER_THREAD],
+#else
+        REAL r_smbuffer[REG_SIZE_Z][REGY_SIZE][REGX_SIZE],
+#endif   
         int global_z, int p_y, int p_x,
         int width_z, int width_y, int width_x,
 
@@ -48,7 +54,8 @@ __device__ void __forceinline__ process_one_layer
   //in(global, halo+glboal_z)
   if(!loadfrmcache)
   {
-    global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+    // global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+    global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
                                         (input, smbuffer_buffer_ptr,
                                           p_x, p_y, global_z,
                                           width_x, width_y, width_z,
@@ -59,7 +66,17 @@ __device__ void __forceinline__ process_one_layer
   }
   else
   {
-    global2sm<REAL, halo, halo, 1, halo+1, 0, false, false>
+    // global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
+    //                                     (input, smbuffer_buffer_ptr,
+    //                                       p_x, p_y, global_z,
+    //                                       width_x, width_y, width_z,
+    //                                       // tile_x_with_halo
+    //                                       sm_width_x, ps_x,
+    //                                       cpbase_y, cpend_y,ps_y,
+    //                                       LOCAL_TILE_X,tid_x);
+
+    // global2sm<REAL, halo, halo, 1, halo+1, 0, false, false>
+    global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, false>
                                       (input, smbuffer_buffer_ptr,
                                         p_x, p_y, global_z,
                                         width_x, width_y, width_z,
@@ -68,7 +85,8 @@ __device__ void __forceinline__ process_one_layer
                                         LOCAL_TILE_X,tid_x);
 
 
-    global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+    // global2sm<REAL, halo, halo, 1, halo+1, 0, false, true>
+    global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
                                       (input, smbuffer_buffer_ptr,
                                         p_x, p_y, global_z,
                                         width_x, width_y, width_z,
@@ -89,13 +107,13 @@ __device__ void __forceinline__ process_one_layer
       }
       if(!isloadfrmreg)
       {
-        smbuffer_buffer_ptr[halo][(local_y+ps_y)*sm_width_x+ps_x+tid_x]
+        smbuffer_buffer_ptr[halo+isBOX][(local_y+ps_y)*sm_width_x+ps_x+tid_x]
         // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
           = sm_space[frmcachesmid_z*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x];
       }
       else
       {
-        smbuffer_buffer_ptr[halo][(local_y+ps_y)*sm_width_x+ps_x+tid_x]
+        smbuffer_buffer_ptr[halo+isBOX][(local_y+ps_y)*sm_width_x+ps_x+tid_x]
           // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
           =  r_space[frmcacheregid_z][l_y];
       }
@@ -107,10 +125,10 @@ __device__ void __forceinline__ process_one_layer
       for(int l_x=0; l_x<halo; l_x++)
       {
         //east
-        smbuffer_buffer_ptr[halo][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x+l_x+LOCAL_TILE_X]
+        smbuffer_buffer_ptr[halo+isBOX][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x+l_x+LOCAL_TILE_X]
           = boundary_buffer[boundary_east_step + (boundary_buffer_index_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
         //west
-        smbuffer_buffer_ptr[halo][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x-halo+l_x] 
+        smbuffer_buffer_ptr[halo+isBOX][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x-halo+l_x] 
           = boundary_buffer[boundary_west_step + (boundary_buffer_index_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
       }
     }
@@ -119,7 +137,7 @@ __device__ void __forceinline__ process_one_layer
       // __syncthreads();
   // __syncthreads();
   //sm2reg
-
+  #ifndef BOX
   sm2regs<REAL, LOCAL_ITEM_PER_THREAD, REG_FOLDER_Z, 
             SM_SIZE_Z, halo, 0, halo*2, 
             LOCAL_ITEM_PER_THREAD, 1>
@@ -127,6 +145,8 @@ __device__ void __forceinline__ process_one_layer
       ps_y+index_y, ps_x, 
       // tile_x_with_halo
       sm_width_x, tid_x);
+  #else
+  #endif
   REAL sum[LOCAL_ITEM_PER_THREAD];
   // #pragma unroll
   _Pragma("unroll")
@@ -135,15 +155,16 @@ __device__ void __forceinline__ process_one_layer
     sum[l_y]=0;
   }
   //main computation
-  computation<REAL,LOCAL_ITEM_PER_THREAD,halo,REG_SIZE_Z>( sum,
-                                  smbuffer_buffer_ptr[0],
+  computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
+                                  smbuffer_buffer_ptr,
                                   ps_y+index_y, 
                                   // tile_x_with_halo,
                                   sm_width_x,
                                   tid_x+ps_x,
                                   r_smbuffer,
                                   stencilParaInput);
-  // reg 2 ptr
+  __syncthreads();
+                                  // reg 2 ptr
   // out(global, global_z)
   if(!storetocache)
   {
@@ -156,7 +177,7 @@ __device__ void __forceinline__ process_one_layer
   }  
   else
   {
-    _Pragma("unroll")
+   _Pragma("unroll")
     for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
     {
       int local_y=l_y+index_y;
@@ -169,23 +190,24 @@ __device__ void __forceinline__ process_one_layer
       if(!isstoretoreg)
       {
         sm_space[(tocachesmid_z)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-LOCAL_NOCACHE_Y)*LOCAL_TILE_X+tid_x]
-        //sm_space[(cache_z-halo)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-LOCAL_NOCACHE_Y)*LOCAL_TILE_X+tid_x]
           =  sum[l_y];
       }
       else
       {
         r_space[tocacheregid_z][l_y]=sum[l_y];
       }
-
     }
   }
   REAL* tmp = smbuffer_buffer_ptr[0];
   // smswap 
   _Pragma("unroll")
-  for(int hl=1; hl<halo+1; hl++)
+  for(int hl=1; hl<halo+1+isBOX; hl++)
   {
     smbuffer_buffer_ptr[hl-1]=smbuffer_buffer_ptr[hl];
   }
-  smbuffer_buffer_ptr[halo]=tmp;
-  regsself3d<REAL,REG_SIZE_Z,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
+  smbuffer_buffer_ptr[halo+isBOX]=tmp;
+  #ifndef BOX
+    regsself3d<REAL,REG_SIZE_Z,LOCAL_ITEM_PER_THREAD>(r_smbuffer);
+  #else
+  #endif
 }
