@@ -103,7 +103,7 @@ __device__ void __forceinline__ process_one_layer
       // int l_global_z = (MIN(global_z+1,width_z-1));
       int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
       // _Pragma("unroll")
-      for(int l_y=tid_y-LOCAL_NOCACHE_Y+LOCAL_TILE_Y-1; l_y<LOCAL_TILE_Y+halo; l_y+=bdimx/TILE_X)
+      for(int l_y=tid_y-LOCAL_NOCACHE_Y+LOCAL_TILE_Y; l_y<LOCAL_TILE_Y+halo; l_y+=bdimx/TILE_X)
       {
         int l_global_y = (MIN(p_y+l_y,width_y-1));
           l_global_y = (MAX(l_global_y,0));
@@ -121,7 +121,7 @@ __device__ void __forceinline__ process_one_layer
 
     
 
-    __syncthreads();
+    // __syncthreads();
                  
     // // cached region
     // __syncthreads();
@@ -192,8 +192,10 @@ __device__ void __forceinline__ process_one_layer
                                   tid_x+ps_x,
                                   r_smbuffer,
                                   stencilParaInput);
+  #ifdef BOX
   __syncthreads();
-                                  // reg 2 ptr
+  #endif
+                                    // reg 2 ptr
   // out(global, global_z)
   if(!storetocache)
   {
