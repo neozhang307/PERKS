@@ -199,6 +199,14 @@ __device__ void __forceinline__ process_one_layer
                                   tid_x+ps_x,
                                   r_smbuffer,
                                   stencilParaInput);
+  // computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
+  //                                 smbuffer_buffer_ptr,
+  //                                 ps_y+index_y, 
+  //                                 // tile_x_with_halo,
+  //                                 sm_width_x,
+  //                                 tid_x+ps_x,
+  //                                 r_smbuffer,
+  //                                 stencilParaInput);
 
   // #ifdef BOX
   __syncthreads();

@@ -168,9 +168,9 @@ printf("sm is %ld\n",executeSM);
   
   int reg_folder_z=REG_FOLDER_Z;
   // max_sm_flder=14;//a100
-  max_sm_flder=8;//v100
+  max_sm_flder=4;//v100
   
-  int sharememory1 = 2*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
+  int sharememory1 = 2*HALO*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
   int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
   printf("%d\n",executeSM);
   executeSM+=sharememory2;

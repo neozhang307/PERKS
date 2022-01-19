@@ -698,7 +698,7 @@ kernel3d_general(REAL * __restrict__ input,
           }
         }
       }
-      // __syncthreads();
+      __syncthreads();
     }
   }
 
