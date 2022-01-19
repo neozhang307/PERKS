@@ -167,11 +167,15 @@ printf("sm is %ld\n",executeSM);
 
   
   int reg_folder_z=REG_FOLDER_Z;
-  max_sm_flder=2;
+  // max_sm_flder=14;//a100
+  max_sm_flder=8;//v100
   
-  int sharememory1 = 2*(CACHE_TILE_Y)*(max_sm_flder+reg_folder_z)*sizeof(REAL);
-  int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(CACHE_TILE_Y)*TILE_X;
+  int sharememory1 = 2*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
+  int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
+  printf("%d\n",executeSM);
   executeSM+=sharememory2;
+  printf("%d\n",executeSM);
+
 #endif
 
 #if defined(PERSISTENTTHREAD)
@@ -191,7 +195,8 @@ printf("sm is %ld\n",executeSM);
 
   printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
 
-  size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2 ;
+  size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2+
+                    width_x*height*sizeof(REAL)*HALO*(width_y/TILE_Y)*2  ;
 
   REAL * l2_cache1;
   REAL * l2_cache2;
@@ -264,6 +269,11 @@ if(warmup)
   printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000);
   printf("[FORMA] Computation(GFLOPS/s) : %lf\n",(REAL)iteration*height*width_x*width_y*(HALO*2+1)*(HALO*2+1)/ elapsedTime/1000/1000);
   printf("[FORMA] Bandwidht(GB/s) : %lf\n",(REAL)iteration*height*width_x*width_y*sizeof(REAL)*2/ elapsedTime/1000/1000);
+  printf("[FORMA] rfder : %d\n",REG_FOLDER_Z);
+#ifdef PERSISTENTLAUNCH
+  printf("[FORMA] sfder : %d\n",max_sm_flder);
+  // printf("[FORMA] sm : %f\n",executeSM/1024);
+#endif
 #else
   //h y x iter TILEX thready=1 gridx gridy latency speed 
   // printf("%d\t%d\t%d\t%d\t",height,width_y,width_x,iteration); 

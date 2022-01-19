@@ -17,7 +17,7 @@
 
 namespace cg = cooperative_groups;
 
-template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y, int LOCAL_NOCACHE_Y, int SM_SIZE_Z, int REG_SIZE_Z,
+template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y, int SM_SIZE_Z, int REG_SIZE_Z,
           int REG_CACHESIZE_Z=1,          
           bool loadfrmcache=false, bool storetocache=false,
           bool isloadfrmreg=false, bool isstoretoreg=false,
@@ -46,6 +46,7 @@ __device__ void __forceinline__ process_one_layer
         REAL  r_space[REG_CACHESIZE_Z][LOCAL_ITEM_PER_THREAD]=NULL, int frmcacheregid_z=0, int tocacheregid_z=0,
         REAL* boundary_buffer=NULL, int boundary_buffer_index_z=0, 
         const int boundary_east_step=0, const int boundary_west_step=0,
+        const int boundary_north_step=0, const int boundary_south_step=0,
         const int boundary_step_yz=0
         
       )
@@ -75,69 +76,55 @@ __device__ void __forceinline__ process_one_layer
     //                                       cpbase_y, cpend_y,ps_y,
     //                                       LOCAL_TILE_X,tid_x);
 
-    // for(int l_z=0; l_z<1; l_z++)
-    {
-      // int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-      // int l_global_z = (MIN(global_z+1,width_z-1));
-      int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
-      // _Pragma("unroll")
-      for(int l_y=tid_y-halo; l_y<LOCAL_NOCACHE_Y; l_y+=bdimx/TILE_X)
-      {
-        int l_global_y = (MIN(p_y+l_y,width_y-1));
-          l_global_y = (MAX(l_global_y,0));
-          smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x-halo) + ps_x]=
-              input[l_global_z*width_x*width_y+l_global_y*width_x+
-              MAX((p_x+tid_x-halo),0)];
-        if(tid_x<halo*2)
-        {
-            smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
-                input[l_global_z*width_x*width_y+l_global_y*width_x+
-                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
-        }
-      }
-    }
+    // // for(int l_z=0; l_z<1; l_z++)
+    // {
+    //   int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
+    //   for(int l_y=tid_y-halo; l_y<0; l_y+=bdimx/TILE_X)
+    //   {
+    //     int l_global_y = (MIN(p_y+l_y,width_y-1));
+    //       l_global_y = (MAX(l_global_y,0));
+    //       smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x) + ps_x]=
+    //           input[l_global_z*width_x*width_y+l_global_y*width_x+
+    //           MAX((p_x+tid_x-halo),0)];
+    //     if(tid_x<halo*2)
+    //     {
+    //         smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
+    //             input[l_global_z*width_x*width_y+l_global_y*width_x+
+    //               MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
+    //     }
+    //   }
+    // }
 
-    // for(int l_z=0; l_z<1; l_z++)
-    {
-      // int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-      // int l_global_z = (MIN(global_z+1,width_z-1));
-      int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
-      // _Pragma("unroll")
-      for(int l_y=tid_y-LOCAL_NOCACHE_Y+LOCAL_TILE_Y; l_y<LOCAL_TILE_Y+halo; l_y+=bdimx/TILE_X)
-      {
-        int l_global_y = (MIN(p_y+l_y,width_y-1));
-          l_global_y = (MAX(l_global_y,0));
-          smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x-halo) + ps_x]=
-              input[l_global_z*width_x*width_y+l_global_y*width_x+
-              MAX((p_x+tid_x-halo),0)];
-        if(tid_x<halo*2)
-        {
-            smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
-                input[l_global_z*width_x*width_y+l_global_y*width_x+
-                  MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
-        }
-      }
-    }
+    // // for(int l_z=0; l_z<1; l_z++)
+    // {
+    //   int l_global_z = global_z+1;//(MIN(global_z+1,width_z-1));
+    //   for(int l_y=tid_y-0+LOCAL_TILE_Y; l_y<LOCAL_TILE_Y+halo; l_y+=bdimx/TILE_X)
+    //   {
+    //     int l_global_y = (MIN(p_y+l_y,width_y-1));
+    //       l_global_y = (MAX(l_global_y,0));
+    //       smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + (tid_x) + ps_x]=
+    //           input[l_global_z*width_x*width_y+l_global_y*width_x+
+    //           MAX((p_x+tid_x-halo),0)];
+    //     if(tid_x<halo*2)
+    //     {
+    //         smbuffer_buffer_ptr[halo+isBOX][sm_width_x*(l_y+ps_y) + tid_x + LOCAL_TILE_X-halo+ps_x]=
+    //             input[l_global_z*width_x*width_y+l_global_y*width_x+
+    //               MIN(p_x+tid_x-halo+LOCAL_TILE_X,width_x-1)];
+    //     }
+    //   }
+    // }
 
-    
-
-    // __syncthreads();
-                 
+                     
     // // cached region
-    // __syncthreads();
     for(int l_y=0; l_y<LOCAL_ITEM_PER_THREAD; l_y++)
     {
       int local_y=l_y+LOCAL_ITEM_PER_THREAD*tid_y;
-      // if(local_y>=LOCAL_TILE_Y-2*LOCAL_NOCACHE_Y) break;
-      if(local_y<NOCACHE_Y||local_y>=LOCAL_TILE_Y-NOCACHE_Y)
-      {
-        continue;
-      }
+
       if(!isloadfrmreg)
       {
         smbuffer_buffer_ptr[halo+isBOX][(local_y+ps_y)*sm_width_x+ps_x+tid_x]
         // =input[(p_z+halo+cache_z)*width_x*width_y+(local_y+halo+p_y)*width_x+p_x+tid_x];
-          = sm_space[frmcachesmid_z*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-NOCACHE_Y)*LOCAL_TILE_X+tid_x];
+          = sm_space[frmcachesmid_z*LOCAL_TILE_X*LOCAL_TILE_Y+(local_y-0)*LOCAL_TILE_X+tid_x];
       }
       else
       {
@@ -148,21 +135,41 @@ __device__ void __forceinline__ process_one_layer
     }
     // __syncthreads();
     // east west
-    for(int l_y=threadIdx.x; l_y<CACHE_TILE_Y; l_y+=blockDim.x)
+    for(int l_y=threadIdx.x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=blockDim.x)
     {
       #pragma unroll
       for(int l_x=0; l_x<halo; l_x++)
       {
         //east
-        smbuffer_buffer_ptr[halo+isBOX][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x+l_x+LOCAL_TILE_X]
-          = boundary_buffer[boundary_east_step + (boundary_buffer_index_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+        smbuffer_buffer_ptr[halo+isBOX][(l_y+0+ps_y)*sm_width_x+ps_x+l_x+LOCAL_TILE_X]
+          = boundary_buffer[boundary_east_step + (boundary_buffer_index_z) * (LOCAL_TILE_Y+2*isBOX)*halo  + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
         //west
-        smbuffer_buffer_ptr[halo+isBOX][(l_y+LOCAL_NOCACHE_Y+ps_y)*sm_width_x+ps_x-halo+l_x] 
-          = boundary_buffer[boundary_west_step + (boundary_buffer_index_z) * CACHE_TILE_Y + (l_y) + l_x * boundary_step_yz];
+        smbuffer_buffer_ptr[halo+isBOX][(l_y+0+ps_y)*sm_width_x+ps_x-halo+l_x] 
+          = boundary_buffer[boundary_west_step + (boundary_buffer_index_z) * (LOCAL_TILE_Y+2*isBOX)*halo  + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+      }
+    }
+    // __syncthreads();
+    //north south
+    // for(int l_x=tid_x; l_x<LOCAL_TILE_X; l_x+=LO)
+    {
+      int l_x=tid_x;
+      #pragma unroll
+      for(int l_y=tid_y; l_y<halo; l_y+=bdimx/LOCAL_TILE_X)
+      {
+        //north
+        smbuffer_buffer_ptr[halo+isBOX][(l_y+LOCAL_TILE_Y+ps_y)*sm_width_x+ps_x+l_x]
+          = boundary_buffer[boundary_north_step + (boundary_buffer_index_z) * (LOCAL_TILE_X)*halo  + (l_x) + l_y * (LOCAL_TILE_X)];
+        
+        //south
+        //->
+        smbuffer_buffer_ptr[halo+isBOX][(l_y-halo+ps_y)*sm_width_x+ps_x+l_x] 
+          = boundary_buffer[boundary_south_step + (boundary_buffer_index_z) * (LOCAL_TILE_X)*halo  + (l_x) + l_y * (LOCAL_TILE_X)];
       }
     }
     __syncthreads();
   }
+  // if(threadIdx.x==0&&blockIdx.x==0)
+
       // __syncthreads();
   // __syncthreads();
   //sm2reg
@@ -192,9 +199,10 @@ __device__ void __forceinline__ process_one_layer
                                   tid_x+ps_x,
                                   r_smbuffer,
                                   stencilParaInput);
-  #ifdef BOX
+
+  // #ifdef BOX
   __syncthreads();
-  #endif
+  // #endif
                                     // reg 2 ptr
   // out(global, global_z)
   if(!storetocache)
@@ -213,14 +221,10 @@ __device__ void __forceinline__ process_one_layer
     {
       int local_y=l_y+index_y;
       // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-      if(local_y<LOCAL_NOCACHE_Y||local_y>=LOCAL_TILE_Y-LOCAL_NOCACHE_Y)
-      {
-        output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
-        continue;
-      }
+
       if(!isstoretoreg)
       {
-        sm_space[(tocachesmid_z)*LOCAL_TILE_X*CACHE_TILE_Y+(local_y-LOCAL_NOCACHE_Y)*LOCAL_TILE_X+tid_x]
+        sm_space[(tocachesmid_z)*LOCAL_TILE_X*LOCAL_TILE_Y+(local_y-0)*LOCAL_TILE_X+tid_x]
           =  sum[l_y];
       }
       else
