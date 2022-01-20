@@ -100,7 +100,7 @@ void j3d_iterative(REAL * h_input, int height, int width_y, int width_x, REAL * 
 //shared memory related 
 size_t executeSM=0;
 #ifndef NAIVE
-    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+HALO+isBOX)+1)*sizeof(REAL);
+    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+HALO*2)+1)*sizeof(REAL);
     executeSM=basic_sm_space;
 #endif
 printf("sm is %ld\n",executeSM);
@@ -167,8 +167,8 @@ printf("sm is %ld\n",executeSM);
 
   
   int reg_folder_z=REG_FOLDER_Z;
-  // max_sm_flder=14;//a100
-  max_sm_flder=4;//v100
+  max_sm_flder=14;//a100
+  // max_sm_flder=8;//v100
   
   int sharememory1 = 2*HALO*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
   int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
@@ -183,7 +183,7 @@ printf("sm is %ld\n",executeSM);
 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
-
+  numBlocksPerSm_current=1;
   dim3 block_dim_3(bdimx, 1, 1);
   dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y)));
   dim3 executeBlockDim=block_dim_3;

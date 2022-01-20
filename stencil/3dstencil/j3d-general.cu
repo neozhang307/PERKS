@@ -23,6 +23,7 @@ namespace cg = cooperative_groups;
 
 template<class REAL, int halo, 
 int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y, const int reg_folder_z, bool UseSMCache>
+// __launch_bounds__(256, 2)
 __global__ void 
 kernel3d_general(REAL * __restrict__ input, 
                                 REAL * __restrict__ output, 
@@ -194,8 +195,8 @@ kernel3d_general(REAL * __restrict__ input,
                                           tile_x_with_halo, ps_x,
                                           cpbase_y, cpend_y, 1,ps_y,
                                           LOCAL_TILE_X, tid_x);
-    // // __syncthreads();
-    // //normal
+    // // // __syncthreads();
+    // // //normal
     // // // reg->global
     if(UseRegCache)
     {
@@ -486,29 +487,6 @@ kernel3d_general(REAL * __restrict__ input,
         }
       }
     }
-
-    //sm east and west
-    for(int l_z=0; l_z<max_sm_flder; l_z++)
-    {
-      for(int l_x=0; l_x<halo; l_x++)
-      {
-        for(int l_y=threadIdx.x; l_y<LOCAL_TILE_Y;l_y+=blockDim.x)
-        {
-          //east
-          boundary_buffer[boundary_east_step + (l_z+reg_folder_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)]
-            =
-            sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+LOCAL_TILE_X-halo+l_x];
-
-          //west
-          boundary_buffer[boundary_west_step + (l_z+reg_folder_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)]
-            =
-            sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
-        }
-      }
-    }
-
-
-
     _Pragma("unroll")
     for(int l_z=0; l_z<reg_folder_z; l_z++)
     {
@@ -530,31 +508,46 @@ kernel3d_general(REAL * __restrict__ input,
             = r_space[l_z][ITEM_PER_THREAD-halo+ l_y];
         } 
       }
-    
     }
+    //sm east and west
+    for(int l_z=0; l_z<max_sm_flder; l_z++)
+    {
+      for(int l_x=tid_y; l_x<halo; l_x+=dim_y)
+      {
+        for(int l_y=tid_x; l_y<LOCAL_TILE_Y;l_y+=LOCAL_TILE_X)
+        {
+          //east
+          boundary_buffer[boundary_east_step + (l_z+reg_folder_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)]
+            =
+            sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+LOCAL_TILE_X-halo+l_x];
 
+          //west
+          boundary_buffer[boundary_west_step + (l_z+reg_folder_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)]
+            =
+            sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
+        }
+      }
+    }
     //sm south and north
      _Pragma("unroll")
     for(int l_z=0; l_z<max_sm_flder; l_z++)
     {
       int l_x=tid_x;
-      #pragma unroll
-      for(int l_y=0; l_y<halo; l_y++)
       {
-        //south
-        if(tid_y==0)
+        for(int l_y=tid_y; l_y<halo; l_y+=dim_y)
         {
-          boundary_buffer[boundary_south_step + (l_z+reg_folder_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)]
-            = sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
+          //south
+          {
+            boundary_buffer[boundary_south_step + (l_z+reg_folder_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)]
+              = sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y)*LOCAL_TILE_X+l_x];
+          }
+          //north
+          {
+            boundary_buffer[boundary_north_step + (l_z+reg_folder_z) *  (LOCAL_TILE_X)*halo + (l_x) + (l_y) * (LOCAL_TILE_X)]
+              = sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y+TILE_Y-halo)*LOCAL_TILE_X+l_x];
+          } 
         }
-        //north
-        if(tid_y==dim_y-1)
-        {
-          boundary_buffer[boundary_north_step + (l_z+reg_folder_z) *  (LOCAL_TILE_X)*halo + (l_x) + (l_y) * (LOCAL_TILE_X)]
-            = sm_space[l_z*(LOCAL_TILE_Y)*LOCAL_TILE_X+(l_y+TILE_Y-halo)*LOCAL_TILE_X+l_x];
-        } 
       }
-      
     }
     __syncthreads();
 
@@ -563,11 +556,6 @@ kernel3d_general(REAL * __restrict__ input,
     //store to global memory in l2 cache pointer (hopefully)  
    
     {
-      // int blocksize_z=(width_z/gridDim.z);
-      // int z_quotient = width_z%gridDim.z;
-
-      // const int p_z =   .z * (blocksize_z) + (blockIdx.z<=z_quotient?blockIdx.z:z_quotient);
-
       int bid_x=blockIdx.x;
       int gdimx=gridDim.x;
 
@@ -575,51 +563,110 @@ kernel3d_general(REAL * __restrict__ input,
       int gdimy=gridDim.y;
       
       int bid_z=blockIdx.z;
-      // int p_z = blockIdx.z*total_folder_z;
       //x
-      // #pragma unroll
-      // _Pragma("unroll")
-      for(int l_x=0; l_x<halo; l_x++)
+      if(tid_y<dim_y/2)
       {
-        //z
-        for(int l_z=0; l_z<total_folder_z; l_z++)
+        for(int l_x=tid_y; l_x<halo; l_x+=dim_y/2)
         {
-          //y
-          for(int l_y=threadIdx.x; l_y<LOCAL_TILE_Y; l_y+=blockDim.x)
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
           {
-            // //west
-            l2_cache_o[l2_boundary_west_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
-            = boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
-            //east
-            l2_cache_o[l2_boundary_east_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
-            = boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+            //y
+            for(int l_y=tid_x; l_y<LOCAL_TILE_Y; l_y+=LOCAL_TILE_X)
+            {
+              // //west
+              l2_cache_o[l2_boundary_west_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
+              = boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+              // //east
+              // l2_cache_o[l2_boundary_east_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
+              // = boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+            }
           }
         }
       }
+      else
+      {
+        for(int l_x=tid_y-dim_y/2; l_x<halo; l_x+=dim_y/2)
+        {
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
+          {
+            //y
+            for(int l_y=tid_x; l_y<LOCAL_TILE_Y; l_y+=LOCAL_TILE_X)
+            {
+              // //west
+              // l2_cache_o[l2_boundary_west_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
+              // = boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+              //east
+              l2_cache_o[l2_boundary_east_step + l_y + bid_y*LOCAL_TILE_Y + (l_x + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
+              = boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)];
+            }
+          }
+        }
+      }
+      
       // // //north south
-      for(int l_y=0; l_y<halo; l_y++)
+      // if(tid_y<dim_y/2)
+      if(tid_y<dim_y/2)
       {
-        //z
-        // #pragma unroll
-        // _Pragma("unroll")
-        for(int l_z=0; l_z<total_folder_z; l_z++)
+        for(int l_y=tid_y; l_y<halo; l_y+=dim_y/2)
         {
-          //y
-          // #pragma unroll
-          // _Pragma("unroll")
-          for(int l_x=threadIdx.x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
           {
-            // //north
-            // l2_cache_o[((bid_x*2+0)*halo+l_x)*width_y*width_z + (l_z+p_z+1) * LOCAL_TILE_Y*dim_y + (l_y+bid_y*LOCAL_TILE_Y)]
-            // l2_cache_o[ ((bid_x+bid_y*gdimx+ bid_z*gdimx*gdimy)*2+0)*halo*total_folder_z*LOCAL_TILE_Y + (l_z) * LOCAL_TILE_Y + (l_y) + l_x * boundary_step_yz] 
-            l2_cache_o[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ] 
-              = boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
-            // south 
-            l2_cache_o[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ]  
-              = boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+            //y
+            // for(int l_x=threadIdx.x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+            {
+              int l_x=tid_x;
+              // //north
+              l2_cache_o[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ] 
+                = boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+              // south 
+              // l2_cache_o[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ]  
+              //   = boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+            }
           }
         }
       }
+      else
+      {
+        for(int l_y=tid_y-dim_y/2; l_y<halo; l_y+=dim_y/2)
+        {
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
+          {
+            //y
+            // for(int l_x=threadIdx.x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+            {
+              int l_x=tid_x;
+              // //north
+              // l2_cache_o[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ] 
+              //   = boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+              // south 
+              l2_cache_o[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ]  
+                = boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+            }
+          }
+        }
+      }
+      // for(int l_y=tid_y; l_y<halo; l_y+=dim_y)
+      // {
+      //   //z
+      //   for(int l_z=0; l_z<total_folder_z; l_z++)
+      //   {
+      //     //y
+      //     // for(int l_x=threadIdx.x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+      //     {
+      //       int l_x=tid_x;
+      //       // //north
+      //       l2_cache_o[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ] 
+      //         = boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+      //       // south 
+      //       l2_cache_o[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + bid_y * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ]  
+      //         = boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)];
+      //     }
+      //   }
+      // }
     }
 
     gg.sync();
@@ -643,61 +690,164 @@ kernel3d_general(REAL * __restrict__ input,
       
       int bid_z=blockIdx.z;
       //x
-      for(int l_x=0; l_x<halo; l_x++)
+      if(tid_y<dim_y/2)
       {
-        //z
-        for(int l_z=0; l_z<total_folder_z; l_z++)
+        for(int l_x=tid_y; l_x<halo; l_x+=dim_y/2)
         {
-          //y
-          for(int l_y=threadIdx.x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=blockDim.x)
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
           {
-            int l2_cache_l_y=MAX(l_y+ bid_y*LOCAL_TILE_Y,0);
-            l2_cache_l_y=MIN(l2_cache_l_y,width_y-1);
+            //y
+            for(int l_y=tid_x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=LOCAL_TILE_X)
+            {
+              int l2_cache_l_y=MAX(l_y+ bid_y*LOCAL_TILE_Y,0);
+              l2_cache_l_y=MIN(l2_cache_l_y,width_y-1);
 
-            //east
-            boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo+ (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
-              (bid_x==gdimx-1?
-              l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + ((halo-1) + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
-             :
-             l2_cache_i[l2_boundary_west_step+l2_cache_l_y  + (l_x + (bid_x+1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo  ]
-             )
-             ;
-            //west
-            boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
-              (bid_x==0?
-                l2_cache_i[l2_boundary_west_step+ l2_cache_l_y  + (0 + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
-                :
-                l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + (l_x + (bid_x-1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ])
-                ;
+              //east
+              boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo+ (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+                (bid_x==gdimx-1?
+                l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + ((halo-1) + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
+               :
+               l2_cache_i[l2_boundary_west_step+l2_cache_l_y  + (l_x + (bid_x+1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo  ]
+               )
+               ;
+              // //west
+              // boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+              //   (bid_x==0?
+              //     l2_cache_i[l2_boundary_west_step+ l2_cache_l_y  + (0 + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
+              //     :
+              //     l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + (l_x + (bid_x-1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ])
+              //     ;
+            }
           }
         }
       }
-      for(int l_y=0; l_y<halo; l_y++)
+      else
       {
-        //z
-        for(int l_z=0; l_z<total_folder_z; l_z++)
+        for(int l_x=tid_y-dim_y/2; l_x<halo; l_x+=dim_y/2)
         {
-          //y
-          for(int l_x=threadIdx.x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
           {
-            //north
-            boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
-              (bid_y==gdimy-1?
-             boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + (halo-1) * (LOCAL_TILE_X)]
-             :
-             l2_cache_i[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + (bid_y+1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo  ]
-             )
-             ;
-            //south
-            boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
-              (bid_y==0?
-                boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + 0 * (LOCAL_TILE_X)]
-                :
-                l2_cache_i[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + (bid_y-1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ])
-                ;
+            //y
+            for(int l_y=tid_x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=LOCAL_TILE_X)
+            {
+              int l2_cache_l_y=MAX(l_y+ bid_y*LOCAL_TILE_Y,0);
+              l2_cache_l_y=MIN(l2_cache_l_y,width_y-1);
+
+              // //east
+              // boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo+ (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+              //   (bid_x==gdimx-1?
+              //   l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + ((halo-1) + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
+              //  :
+              //  l2_cache_i[l2_boundary_west_step+l2_cache_l_y  + (l_x + (bid_x+1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo  ]
+              //  )
+              //  ;
+              //west
+              boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+                (bid_x==0?
+                  l2_cache_i[l2_boundary_west_step+ l2_cache_l_y  + (0 + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
+                  :
+                  l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + (l_x + (bid_x-1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ])
+                  ;
+            }
           }
         }
       }
+      // for(int l_x=tid_y; l_x<halo; l_x+=dim_y)
+      // {
+      //   //z
+      //   for(int l_z=0; l_z<total_folder_z; l_z++)
+      //   {
+      //     //y
+      //     for(int l_y=tid_x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=LOCAL_TILE_X)
+      //     {
+      //       int l2_cache_l_y=MAX(l_y+ bid_y*LOCAL_TILE_Y,0);
+      //       l2_cache_l_y=MIN(l2_cache_l_y,width_y-1);
+
+      //       //east
+      //       boundary_buffer[boundary_east_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo+ (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+      //         (bid_x==gdimx-1?
+      //         l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + ((halo-1) + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ]  
+      //        :
+      //        l2_cache_i[l2_boundary_west_step+l2_cache_l_y  + (l_x + (bid_x+1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo  ]
+      //        )
+      //        ;
+      //       //west
+      //       boundary_buffer[boundary_west_step + (l_z) *  (LOCAL_TILE_Y+2*isBOX)*halo + (l_y+isBOX) + l_x * (LOCAL_TILE_Y+2*isBOX)] =
+      //         (bid_x==0?
+      //           l2_cache_i[l2_boundary_west_step+ l2_cache_l_y  + (0 + bid_x*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ] 
+      //           :
+      //           l2_cache_i[l2_boundary_east_step+ l2_cache_l_y  + (l_x + (bid_x-1)*halo)*width_y + (l_z+bid_z*total_folder_z)*width_y*gdimx*halo ])
+      //           ;
+      //     }
+      //   }
+      // }
+      if(tid_y<dim_y/2)
+      {
+        for(int l_y=tid_y; l_y<halo; l_y+=dim_y/2)
+        {
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
+          {
+            //y
+            // for(int l_x=tid_x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+            {
+              int l_x=tid_x;
+              // int l_y=tid_y;
+              if(tid_y<halo)
+              //north
+              boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
+                (bid_y==gdimy-1?
+               boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + (halo-1) * (LOCAL_TILE_X)]
+               :
+               l2_cache_i[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + (bid_y+1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo  ]
+               )
+               ;
+              //south
+              boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
+                (bid_y==0?
+                  boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + 0 * (LOCAL_TILE_X)]
+                  :
+                  l2_cache_i[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + (bid_y-1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ])
+                  ;
+            }
+          }
+        }
+      }
+      else
+      {
+        for(int l_y=tid_y-dim_y/2; l_y<halo; l_y+=dim_y/2)
+        {
+          //z
+          for(int l_z=0; l_z<total_folder_z; l_z++)
+          {
+            //y
+            // for(int l_x=tid_x; l_x<LOCAL_TILE_X; l_x+=blockDim.x)
+            {
+              int l_x=tid_x;
+              // int l_y=tid_y;
+              // if(tid_y<halo)
+              //north
+              boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
+                (bid_y==gdimy-1?
+               boundary_buffer[boundary_north_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + (halo-1) * (LOCAL_TILE_X)]
+               :
+               l2_cache_i[l2_boundary_south_step + l_x + bid_x * TILE_X + (l_y + (bid_y+1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo  ]
+               )
+               ;
+              // //south
+              // boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + l_y * (LOCAL_TILE_X)] =
+              //   (bid_y==0?
+              //     boundary_buffer[boundary_south_step + (l_z) *  (LOCAL_TILE_X)*halo + (l_x) + 0 * (LOCAL_TILE_X)]
+              //     :
+              //     l2_cache_i[l2_boundary_north_step + l_x + bid_x * TILE_X + (l_y + (bid_y-1) * halo) * width_x + (l_z + bid_z * total_folder_z) * width_x * gdimy*halo ])
+              //     ;
+            }
+          }
+        }
+      }
+
       __syncthreads();
     }
   }

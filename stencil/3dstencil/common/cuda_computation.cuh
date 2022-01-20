@@ -15,8 +15,8 @@
 
 
 
-// #define bdimx (256)
 #define bdimx (256)
+// #define bdimx (128)
 
 // #define ITEM_PER_THREAD (8) 
 #define ITEM_PER_THREAD (8) 
@@ -135,7 +135,7 @@
 #endif
 
 
-template<class REAL, int RESULT_SIZE, int halo, int SMZ_SIZE=halo+1+isBOX, int REGZ_SIZE=2*halo+1, int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1, int REG_BASE=halo>
+template<class REAL, int RESULT_SIZE, int halo, int SMZ_SIZE=halo+1+halo, int REGZ_SIZE=2*halo+1, int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1, int REG_BASE=halo>
 __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
                                             REAL* sm_ptr[SMZ_SIZE], 
                                             int sm_y_base, int sm_width, int sm_x_ind,

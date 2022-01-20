@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 
   iteration=iteration==0?3:iteration;
 #ifdef REFCHECK
-  iteration=4;
+  iteration=8;
   // j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output,iteration);
   j3d_gold((REAL*)input, height, width_y, width_x, (REAL*)output);
   j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
