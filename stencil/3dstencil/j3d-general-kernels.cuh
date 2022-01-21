@@ -64,6 +64,7 @@ __device__ void __forceinline__ process_one_layer
                                           sm_width_x, ps_x,
                                           cpbase_y, cpend_y,1,ps_y,
                                           LOCAL_TILE_X,tid_x);
+      //sm2reg
   }
   else
   {
@@ -86,6 +87,7 @@ __device__ void __forceinline__ process_one_layer
           =  r_space[frmcacheregid_z][l_y];
       }
     }
+      //sm2reg
     // east west
     for(int l_y=tid_x-isBOX; l_y<LOCAL_TILE_Y+isBOX; l_y+=LOCAL_TILE_X)
     {
@@ -150,7 +152,6 @@ __device__ void __forceinline__ process_one_layer
   // #ifdef BOX
   __syncthreads();
   // #endif
-  // out(global, global_z)
   if(!storetocache)
   {
     reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
@@ -168,6 +169,7 @@ __device__ void __forceinline__ process_one_layer
       int local_y=l_y+index_y;
       // output[global_z*width_x*width_y+(p_y+local_y)*width_x+p_x+tid_x]=sum[l_y];
 
+      // if(!isstoretoreg)
       if(!isstoretoreg)
       {
         sm_space[(tocachesmid_z)*LOCAL_TILE_X*LOCAL_TILE_Y+(local_y-0)*LOCAL_TILE_X+tid_x]

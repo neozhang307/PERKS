@@ -195,8 +195,6 @@ kernel3d_general(REAL * __restrict__ input,
                                           tile_x_with_halo, ps_x,
                                           cpbase_y, cpend_y, 1,ps_y,
                                           LOCAL_TILE_X, tid_x);
-    // // // __syncthreads();
-    // // //normal
     // // // reg->global
     if(UseRegCache)
     {
@@ -437,7 +435,6 @@ kernel3d_general(REAL * __restrict__ input,
     // general version
     // in(global, cache_sm_end+halo, p_z_end+halo) out(global, cache_sm_end, p_z_end) 
     for(int global_z=p_z_sm_end; global_z<p_z_end; global_z+=1)
-    // for(int global_z=p_z; global_z<p_z_end; global_z+=1)
     {
       process_one_layer<REAL, halo, LOCAL_ITEM_PER_THREAD, LOCAL_TILE_X, LOCAL_TILE_Y, halo+1+isBOX, 2*halo+1>
       (
