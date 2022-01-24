@@ -46,7 +46,7 @@ bool                    g_quiet     = false;        // Whether to display stats 
 // bool                    g_verbose2  = false;        // Whether to display input to console
 CachingDeviceAllocator  g_allocator(true);          // Caching allocator for device memory
 
-#undef USEVDATA
+// #undef USEVDATA
 #include "tridiag.h"
 #include "cg_driver.cuh"
 
@@ -144,7 +144,7 @@ void myTest(
   cudaMallocManaged(reinterpret_cast<void **>(&rhs), sizeof(ValueT) * N);
 
   double *dot_result;
- cudaMallocManaged(reinterpret_cast<void **>(&dot_result), sizeof(double)*2);
+  cudaMallocManaged(reinterpret_cast<void **>(&dot_result), sizeof(double)*2);
 
   *dot_result = 0.0;
 
@@ -288,15 +288,18 @@ void myTest(
   fprintf(stderr,"%s\t"
     "%e\t"
     "%d\t%d\t%d\t"
-    "%lu\t%d\t%d\t%d\t%d\t%d\t%d\t"
-    "%f\t%d\n",mtx_filename.c_str(),
+    "%lu\t"
+    // "%d\t%d\t%d\t%d\t"
+    "%d\t%d\t"
+    "%f\t%d\n",
+        mtx_filename.c_str(),
         sqrt(r1),
         nz, N, cgParamsT.gridDim,
         smParamsT.sMemSizeTemptTotal,
-        smParamsT.sm_size_total_coor, 
-        smParamsT.sm_size_total_thread_coor, 
-        smParamsT.sm_size_total_vals, 
-        smParamsT.sm_size_total_cols, 
+        // smParamsT.sm_size_total_coor, 
+        // smParamsT.sm_size_total_thread_coor, 
+        // smParamsT.sm_size_total_vals, 
+        // smParamsT.sm_size_total_cols, 
         smParamsT.sm_size_total_r, 
         smParamsT.sm_size_total_x, 
 

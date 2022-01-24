@@ -62,17 +62,22 @@ struct SMCacheParams
     OffsetT sm_size_total_coor;
     OffsetT sm_size_unit_coor;
 
-    OffsetT sm_size_thread_coor;
-    OffsetT sm_size_total_thread_coor;
-    OffsetT sm_size_unit_thread_coor;
+    OffsetT sm_size_unit_matrix;
+    OffsetT sm_size_blocktile_matrix;
+    OffsetT sm_size_blocktile_total_matrix;
+    OffsetT sm_num_matrixperblk;
 
-    OffsetT sm_size_vals;
-    OffsetT sm_size_unit_vals;
-    OffsetT sm_size_total_vals;
+    // OffsetT sm_size_thread_coor;
+    // OffsetT sm_size_total_thread_coor;
+    // OffsetT sm_size_unit_thread_coor;
 
-    OffsetT sm_size_cols;
-    OffsetT sm_size_unit_cols;
-    OffsetT sm_size_total_cols;
+    // OffsetT sm_size_vals;
+    // OffsetT sm_size_unit_vals;
+    // OffsetT sm_size_total_vals;
+
+    // OffsetT sm_size_cols;
+    // OffsetT sm_size_unit_cols;
+    // OffsetT sm_size_total_cols;
 
     OffsetT sm_size_unit_r;
     OffsetT sm_size_total_r;
@@ -402,7 +407,10 @@ template <
     // <
     typename    AgentSegmentFixupPolicyT,       ///< Parameterized AgentSegmentFixupPolicy tuning policy type
     // typename    PairsInputIteratorT,            ///< Random-access input iterator type for keys
-    typename    AggregatesOutputIteratorT>//,      ///< Random-access output iterator type for values
+    typename    AggregatesOutputIteratorT,
+    bool isBaseline=true,
+    bool cacheMatrix=true 
+    >//,      ///< Random-access output iterator type for values
     // typename    OffsetT,                        ///< Signed integer type for global offsets
             // typename    ScanTileStateT>                 ///< Tile status interface type
 __launch_bounds__(256)
@@ -416,8 +424,6 @@ __global__ void gpuConjugateGradient_cub
     int                             num_segment_fixup_tiles,    ///< [in] Number of reduce-by-key tiles (fixup grid size)
     // int                             range_segment,        
     // AggregatesOutputIteratorT   d_aggregates_out,   ///< [in,out] Output value aggregates
-
-
     OffsetT *I, OffsetT *J, ValueT *val,
     ValueT *x, ValueT *Ax, ValueT *p,
     ValueT *r, double *dot_result,
@@ -428,18 +434,17 @@ __global__ void gpuConjugateGradient_cub
     OffsetT workCountSMX
 ) {
 
-
-
     cg::thread_block cta = cg::this_thread_block();
     cg::grid_group grid = cg::this_grid();
     extern __shared__ char tmp_ori[];
     double *tmp=(double*)tmp_ori;
 
     CoordinateT *sm_tile_coordinates=(CoordinateT *)(tmp_ori+smParamsT.sMemSizeTempt);
-    CoordinateT *sm_tile_thread_coordinates=sm_tile_coordinates+smParamsT.sm_size_unit_coor;
+    // CoordinateT *sm_tile_coordinates=(CoordinateT *)(tmp_ori+smParamsT.sMemSizeTemptTotal);
+    // CoordinateT *sm_tile_thread_coordinates=sm_tile_coordinates+smParamsT.sm_size_unit_coor;
     // __shared__ CoordinateT *sm_tile
     // auto spmv_kernel=DvFuncSpmvKernelSM2<SpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, true, false>;
-    auto segment_fixup_kernel=DvFuncSegmentFixupKernel<AgentSegmentFixupPolicyT, KeyValuePair<OffsetT,ValueT>*, ValueT*, OffsetT, ScanTileStateT>;
+    // auto segment_fixup_kernel=DvFuncSegmentFixupKernel<AgentSegmentFixupPolicyT, KeyValuePair<OffsetT,ValueT>*, ValueT*, OffsetT, ScanTileStateT>;
 
     unsigned int max_iter = maxiter;//N;//MAXITER;
 
@@ -457,8 +462,8 @@ __global__ void gpuConjugateGradient_cub
                 true,
                 false>
             AgentSpmvT;
-    __shared__ typename AgentSpmvT::TempStorage temp_storage;
-    // typename AgentSpmvT::TempStorage temp_storage3=((typename AgentSpmvT::TempStorage*)tmp)[1];
+    // __shared__ typename AgentSpmvT::TempStorage temp_storage;
+    typename AgentSpmvT::TempStorage* temp_storage=((typename AgentSpmvT::TempStorage*)tmp_ori);
     typedef AgentSegmentFixup<
                 AgentSegmentFixupPolicyT,
                 KeyValuePair<OffsetT,ValueT>*,
@@ -469,7 +474,12 @@ __global__ void gpuConjugateGradient_cub
             AgentSegmentFixupT;
 
         // Shared memory for AgentSegmentFixup
-    __shared__ typename AgentSegmentFixupT::TempStorage temp_storage2;
+    // __shared__ typename AgentSegmentFixupT::TempStorage temp_storage2;
+    typename AgentSegmentFixupT::TempStorage* temp_storage2=((typename AgentSegmentFixupT::TempStorage*)tmp);
+
+    typename AgentSpmvT::MatrixTileUnit* matrixunits 
+            = 
+            (typename AgentSpmvT::MatrixTileUnit*)(tmp_ori+smParamsT.sm_size_coor+smParamsT.sMemSizeTempt);
 
     //LINGQI:
     /*
@@ -480,46 +490,44 @@ __global__ void gpuConjugateGradient_cub
     */
 
     {
-        int sm_id=0;
-        for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
+        if(isBaseline)
         {
-            AgentSpmvT(temp_storage, spmv_params).ConsumeTilePERKS<false>(
-                d_tile_coordinates,
-                sm_tile_coordinates,
-                d_tile_carry_pairs,
-                num_merge_tiles,
-                sm_id++,
-                tile_idx);
+            for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
+            {
+                AgentSpmvT(temp_storage[0], spmv_params).ConsumeTile(
+                    // tile_idx,
+                    d_tile_coordinates,
+                    d_tile_carry_pairs,
+                    num_merge_tiles,
+                    tile_idx);
+            }
+            // assert(-1);
+            // return;
         }
-        // for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-        // {
-        //     AgentSpmvT(temp_storage, spmv_params).ConsumeTilePERKS(
-        //         // tile_idx,
-        //         d_tile_coordinates,
-        //         d_tile_carry_pairs,
-        //         num_merge_tiles,
-        //         tile_idx);
-        // }
+        else
+        {
+            int sm_id=0;
+            for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
+            {
+                AgentSpmvT(temp_storage[0], spmv_params).ConsumeTilePERKS
+                <false,cacheMatrix>(
+                    d_tile_coordinates,
+                    sm_tile_coordinates,
+                    d_tile_carry_pairs,
+                    num_merge_tiles,
+                    sm_id++,
+                    tile_idx,
+                    matrixunits,
+                    smParamsT.sm_num_matrixperblk);
+            }
+            // assert(false);
+            // return;
+        }
 
         // Initialize fixup tile status
         tile_state.InitializeStatus(num_segment_fixup_tiles);
     }
-    // {
-    //     int sm_id=0;
-    //     for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-    //     {
-    //         AgentSpmvT(temp_storage, spmv_params).ConsumeTile2(
-    //                 tile_idx,
-    //                 d_tile_coordinates,
-    //                 sm_tile_coordinates,
 
-    //                 d_tile_carry_pairs,
-    //                 num_merge_tiles,
-    //            );
-    //     }
-    //     // Initialize fixup tile status
-    //     tile_state.InitializeStatus(num_segment_fixup_tiles);
-    // }
     cg::sync(grid);
 
     if (num_merge_tiles > 1)
@@ -527,7 +535,7 @@ __global__ void gpuConjugateGradient_cub
         for(int tile_idx=blockIdx.x; tile_idx<num_segment_fixup_tiles; tile_idx+=gridDim.x)
         {
             // Process tiles
-            AgentSegmentFixupT(temp_storage2, d_tile_carry_pairs, Ax, cub::Equality(), cub::Sum()).ConsumeRange(
+            AgentSegmentFixupT(temp_storage2[0], d_tile_carry_pairs, Ax, cub::Equality(), cub::Sum()).ConsumeRange(
                 num_merge_tiles,
                 num_segment_fixup_tiles,
                 tile_state,
@@ -551,97 +559,91 @@ __global__ void gpuConjugateGradient_cub
     int k = 1;
     while (r1 > tol * tol && k <= max_iter) {
     // while (k <= max_iter) {
-        if (k > 1) {
-            b = r1 / r0;
-            //v(r)+p(p)->v(p)
-            gpuScaleVectorAndSaxpy_cub(r, p, alpha, b, N, grid);
-            // gpuCopyVector_cub(r, p, N, grid);
-        } else {
-        //v(r)->v(p)
-        gpuCopyVector_cub(r, p, N, grid);
-      
-    }
-    if (threadIdx.x == 0 && blockIdx.x == 0){ dot_result[1] = 0.0;dot_result[0]=0.0;}
-    cg::sync(grid);
-    //max(IJv) + v(p) -> v(Ax) 
-
-    {
-        int sm_id=0;
-        for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-        {
-            AgentSpmvT(temp_storage, spmv_params).ConsumeTilePERKS
-            <true>(
-                d_tile_coordinates,
-                sm_tile_coordinates,
-                d_tile_carry_pairs,
-                num_merge_tiles,
-                sm_id++,
-                tile_idx
-                );     
+            if (k > 1) {
+                b = r1 / r0;
+                //v(r)+p(p)->v(p)
+                gpuScaleVectorAndSaxpy_cub(r, p, alpha, b, N, grid);
+                // gpuCopyVector_cub(r, p, N, grid);
+            } else {
+            //v(r)->v(p)
+            gpuCopyVector_cub(r, p, N, grid);
+        
         }
-        // for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-        // {
-        //     AgentSpmvT(temp_storage, spmv_params).ConsumeTilePERKS(
-        //         // tile_idx,
-        //         d_tile_coordinates,
-        //         d_tile_carry_pairs,
-        //         num_merge_tiles,
-        //         tile_idx
-        //       );
-        // }
+        if (threadIdx.x == 0 && blockIdx.x == 0){ dot_result[1] = 0.0;dot_result[0]=0.0;}
+        cg::sync(grid);
+        //max(IJv) + v(p) -> v(Ax) 
 
-        // int sm_id=0;
-        // for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
-        // {
-
-        //   AgentSpmvT(temp_storage, spmv_params).ConsumeTile2(
-        //             tile_idx,
-        //             d_tile_coordinates,
-        //             sm_tile_coordinates,
-
-        //             d_tile_carry_pairs,
-        //             num_merge_tiles,
-        //             sm_id);
-        // }
-        // Initialize fixup tile status
-        tile_state.InitializeStatus(num_segment_fixup_tiles);
-    } 
-    cg::sync(grid);
-    if (num_merge_tiles > 1)
-    {
-        for(int tile_idx=blockIdx.x; tile_idx<num_segment_fixup_tiles; tile_idx+=gridDim.x)
         {
-            // Process tiles
-            AgentSegmentFixupT(temp_storage2, d_tile_carry_pairs, Ax, cub::Equality(), cub::Sum()).ConsumeRange(
-                num_merge_tiles,
-                num_segment_fixup_tiles,
-                tile_state,
-                tile_idx);
+            if(isBaseline)
+            {
+                for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
+                {
+                    AgentSpmvT(temp_storage[0], spmv_params).ConsumeTile(
+                        // tile_idx,
+                        d_tile_coordinates,
+                        d_tile_carry_pairs,
+                        num_merge_tiles,
+                        tile_idx);
+                }
+            }
+            else
+            {
+                int sm_id=0;
+                for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
+                {
+                    AgentSpmvT(temp_storage[0], spmv_params).ConsumeTilePERKS
+                    <true,cacheMatrix>(
+                        d_tile_coordinates,
+                        sm_tile_coordinates,
+                        d_tile_carry_pairs,
+                        num_merge_tiles,
+                        sm_id++,
+                        tile_idx,
+                        matrixunits,
+                        smParamsT.sm_num_matrixperblk
+                        );     
+                }
+            }
+
+            // Initialize fixup tile status
+            tile_state.InitializeStatus(num_segment_fixup_tiles);
+        } 
+        cg::sync(grid);
+        if (num_merge_tiles > 1)
+        {
+            for(int tile_idx=blockIdx.x; tile_idx<num_segment_fixup_tiles; tile_idx+=gridDim.x)
+            {
+                // Process tiles
+                AgentSegmentFixupT(temp_storage2[0], d_tile_carry_pairs, Ax, cub::Equality(), cub::Sum()).ConsumeRange(
+                    num_merge_tiles,
+                    num_segment_fixup_tiles,
+                    tile_state,
+                    tile_idx);
+            }
         }
+        // Shared memory for AgentSegmentFixup
+        cg::sync(grid);
+        //v(p)+v(Ax) -> v(dot_result)
+        gpuDotProduct_cub(p, Ax, (dot_result+1), N, cta, tmp, grid);
+
+        cg::sync(grid);
+
+        a = r1 / *(dot_result+1);
+        //v(p)+v(p)->v(a)
+        gpuSaxpy_cub(p, x, a, N, grid);
+        na = -a;
+        //v(Ax)+v(r)->v(na)
+        gpuSaxpy_cub(Ax, r, na, N, grid);
+        // if(threadIdx.x==0&&blockIdx.x==0)printf("<%f,%f>",);
+        r0 = r1;
+        gpuDotProduct_cub(r, r, (dot_result), N, cta, tmp, grid);
+        cg::sync(grid);
+
+        r1 = *(dot_result);
+        k++;
+        // if(threadIdx.x==0&&blockIdx.x==0)printf("<%e>",r1);
     }
-    // Shared memory for AgentSegmentFixup
-    cg::sync(grid);
-    //v(p)+v(Ax) -> v(dot_result)
-    gpuDotProduct_cub(p, Ax, (dot_result+1), N, cta, tmp, grid);
-
-    cg::sync(grid);
-
-    a = r1 / *(dot_result+1);
-    //v(p)+v(p)->v(a)
-    gpuSaxpy_cub(p, x, a, N, grid);
-    na = -a;
-    //v(Ax)+v(r)->v(na)
-    gpuSaxpy_cub(Ax, r, na, N, grid);
-    // if(threadIdx.x==0&&blockIdx.x==0)printf("<%f,%f>",);
-    r0 = r1;
-    gpuDotProduct_cub(r, r, (dot_result), N, cta, tmp, grid);
-    cg::sync(grid);
-
-    r1 = *(dot_result);
-    k++;
-    // if(threadIdx.x==0&&blockIdx.x==0)printf("<%e>",r1);
-  }
-  if(threadIdx.x==0&&blockIdx.x==0)iteration[0]=k;
+    if(threadIdx.x==0&&blockIdx.x==0)iteration[0]=k;
 
 }
 

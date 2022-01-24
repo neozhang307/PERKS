@@ -439,13 +439,13 @@ struct DispatchCG
             int num_merge_items = spmv_params.num_rows + spmv_params.num_nonzeros;
 
             // Tile sizes of kernels
-            int merge_tile_size              = spmv_config.block_threads * spmv_config.items_per_thread;
+            int blk_merge_tile_size              = spmv_config.block_threads * spmv_config.items_per_thread;
             int segment_fixup_tile_size     = segment_fixup_config.block_threads * segment_fixup_config.items_per_thread;
 
 
             // Number of tiles for kernels
-            int num_merge_tiles            = cub::DivideAndRoundUp(num_merge_items, merge_tile_size);
-            int num_segment_fixup_tiles    = cub::DivideAndRoundUp(num_merge_tiles, segment_fixup_tile_size);
+            int blk_num_merge_tiles            = cub::DivideAndRoundUp(num_merge_items, blk_merge_tile_size);
+            int num_segment_fixup_tiles    = cub::DivideAndRoundUp(blk_num_merge_tiles, segment_fixup_tile_size);
 
             // Get SM occupancy for kernels
             int spmv_sm_occupancy;
@@ -478,8 +478,8 @@ struct DispatchCG
 
             // Get grid dimensions
             dim3 spmv_grid_size(
-                CUB_MIN(num_merge_tiles, max_dim_x),
-                cub::DivideAndRoundUp(num_merge_tiles, max_dim_x),
+                CUB_MIN(blk_num_merge_tiles, max_dim_x),
+                cub::DivideAndRoundUp(blk_num_merge_tiles, max_dim_x),
                 1);
 
             dim3 segment_fixup_grid_size(
@@ -490,8 +490,8 @@ struct DispatchCG
             // Get the temporary storage allocation requirements
             size_t allocation_sizes[3];
             if (CubDebug(error = ScanTileStateT::AllocationSize(num_segment_fixup_tiles, allocation_sizes[0]))) break;    // bytes needed for reduce-by-key tile status descriptors
-            allocation_sizes[1] = num_merge_tiles * sizeof(KeyValuePairT);       // bytes needed for block carry-out pairs
-            allocation_sizes[2] = (num_merge_tiles + 1) * sizeof(CoordinateT);   // bytes needed for tile starting coordinates
+            allocation_sizes[1] = blk_num_merge_tiles * sizeof(KeyValuePairT);       // bytes needed for block carry-out pairs
+            allocation_sizes[2] = (blk_num_merge_tiles + 1) * sizeof(CoordinateT);   // bytes needed for tile starting coordinates
             // fprintf(stderr,"%d\n",count++);
 
             // Alias the temporary allocations from the single storage blob (or compute the necessary size of the blob)
@@ -587,14 +587,17 @@ struct DispatchCG
                 auto spmv_search_kernel=DeviceSpmvSearchKernel<PtxSpmvPolicyT, OffsetT, CoordinateT, SpmvParamsT>;
                 auto spmv_kernel=DeviceSpmvKernel<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false>;
                 auto segment_fixup_kernel=DeviceSegmentFixupKernel<PtxSegmentFixupPolicy, KeyValuePairT*, ValueT*, OffsetT, ScanTileStateT>;
-
-              auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*>;  
-
+#ifdef NOCOO
+                auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*, true>;  
+#else
+                auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*, false,true>;  
+#endif
                 using std::is_same;
                 size_t unchangeableTempt=0;//max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
 
 
                 OffsetT tile_size;
+                OffsetT MatrixUnitSize;
                 if(is_same<ValueT, float>::value) { 
                   printf("is float\n");
                   typedef AgentSpmv<
@@ -617,11 +620,12 @@ struct DispatchCG
                                     cub::Sum,
                                     int>
                     AgentSegmentFixupT;
-                    // unchangeableTempt=max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
-                    unchangeableTempt=(sizeof(AgentSpmvT::TempStorage))+2*(sizeof(AgentSegmentFixupT::TempStorage));
+                    unchangeableTempt=max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
+                    // unchangeableTempt=(sizeof(AgentSpmvT::TempStorage))+2*(sizeof(AgentSegmentFixupT::TempStorage));
 
                     /* stuff */
                     tile_size=AgentSpmvT::ITEMS_PER_THREAD*THREADS_PER_BLOCK;
+                    MatrixUnitSize=sizeof(typename AgentSpmvT::MatrixTileUnit);
                 }
                 else
                 {
@@ -646,9 +650,10 @@ struct DispatchCG
                                     cub::Sum,
                                     int>
                     AgentSegmentFixupT;
-                    // unchangeableTempt=max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
-                    unchangeableTempt=(sizeof(AgentSpmvT::TempStorage))+2*(sizeof(AgentSegmentFixupT::TempStorage));
+                    unchangeableTempt=max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
+                    // unchangeableTempt=(sizeof(AgentSpmvT::TempStorage))+(sizeof(AgentSegmentFixupT::TempStorage));
                     tile_size=AgentSpmvT::ITEMS_PER_THREAD*THREADS_PER_BLOCK;
+                    MatrixUnitSize=sizeof(typename AgentSpmvT::MatrixTileUnit);
                 }
                 printf("tile size is %d\n",tile_size);
 
@@ -656,16 +661,16 @@ struct DispatchCG
                 size_t launcableTmep=sMemSize;
                 int numBlocksPerSm = 0;
                 int numThreads = THREADS_PER_BLOCK;
-                size_t sMemSizeTempt=launcableTmep;
+                size_t sMemSizeTempt=max(launcableTmep,unchangeableTempt);
                 
                 printf("launchable tmp memr is %lu\n",launcableTmep);
                 printf("tmp memr is %lu\n",sMemSizeTempt);
    
                 int num_merge_items = spmvParams.num_rows + spmvParams.num_nonzeros;
-                int merge_tile_size = spmv_config.block_threads * spmv_config.items_per_thread;
-                int num_merge_tiles = cub::DivideAndRoundUp(num_merge_items, merge_tile_size);
+                int blk_merge_tile_size = spmv_config.block_threads * spmv_config.items_per_thread;
+                int blk_num_merge_tiles = cub::DivideAndRoundUp(num_merge_items, blk_merge_tile_size);
 
-                // sMemSize=sMemSizeTempt;// + cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);
+                // sMemSize=sMemSizeTempt;// + cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);
 
                 checkCudaErrors(cudaGetDeviceProperties(&deviceProp, 0));
                 // cudaError error = cudaSuccess;
@@ -684,6 +689,7 @@ struct DispatchCG
                 // sMemSizeTempt=sMemSize;
                 numBlocksPerSm=min(numBlocksPerSm,2);
                 dim3 dimGrid(numSms * numBlocksPerSm, 1, 1);
+                printf("<%dX%d>\n",numBlocksPerSm*numSms,THREADS_PER_BLOCK);
                 // dim3 dimGrid(numSms * 2, 1, 1),
                 //dim3 dimBlock(THREADS_PER_BLOCK, 1, 1);
 
@@ -701,70 +707,101 @@ struct DispatchCG
 
                 // OffsetT sm_size = sm_size_unit * THREADS_PER_BLOCK;
 
-                // sMemSize=launcableTmep + 2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
-                // sMemSize+=THREADS_PER_BLOCK*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
+                // sMemSize=launcableTmep + 2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
+                // sMemSize+=THREADS_PER_BLOCK*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
                 
-                sMemSize=SharedMemoryUsed/numBlocksPerSm- unchangeableTempt;//(sizeof(AgentSpmvT::TempStorage)+sizeof(AgentSegmentFixupT::TempStorage))*3;;//unchangeableTempt;
+                sMemSize=SharedMemoryUsed/numBlocksPerSm;//- unchangeableTempt;//(sizeof(AgentSpmvT::TempStorage)+sizeof(AgentSegmentFixupT::TempStorage))*3;;//unchangeableTempt;
 
                 #ifdef NOCOO
-                    OffsetT sm_coor= 0;//2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);
+                    OffsetT sm_coor= 0;//2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);
                 #else
-                    OffsetT sm_coor= 2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);
+                    OffsetT sm_coor= 2*cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x);
                 #endif                
                 OffsetT sm_size_coor= sm_coor*sizeof(CoordinateT);
-                OffsetT sm_size_unit_thread_coor_preffered = cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
-                OffsetT sm_size_unit_thread_coor_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(CoordinateT)/THREADS_PER_BLOCK;
-                OffsetT sm_size_unit_thread_coor =
-                    min(sm_size_unit_thread_coor_preffered,sm_size_unit_thread_coor_remained);
-                // sm_size_unit_thread_coor=0;
+
+                OffsetT sMemSizeRmained=sMemSize-sMemSizeTempt-sm_size_coor;
+                // OffsetT MatrixUnitSize =  (spmv_config.items_per_thread*(sizeof(ValueT)+sizeof(OffsetT))+sizeof(CoordinateT))*THREADS_PER_BLOCK;
+                OffsetT smBlkMatrixNumPreffered=cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x);
+                // blk_num_merge_tiles;
+                OffsetT smBlkMatrixUnitNum=sMemSizeRmained/MatrixUnitSize;
+                smBlkMatrixUnitNum=min(smBlkMatrixNumPreffered,smBlkMatrixUnitNum);
+                OffsetT smBlkMatrixTotalSize = smBlkMatrixUnitNum*MatrixUnitSize;
+
+                sMemSize=sMemSizeTempt+sm_size_coor+smBlkMatrixTotalSize;
 
 
-                OffsetT sm_size_unit_vals_preffered =  cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
-                OffsetT sm_size_unit_vals_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(ValueT)/(tile_size);/// (AgentSpmvT::ITEMS_PER_THREAD * THREADS_PER_BLOCK);
-                OffsetT sm_size_unit_vals=
-                    min(sm_size_unit_vals_preffered,sm_size_unit_vals_remained);
-                printf("<<%d,%d,%lu,%lu>>",sm_size_unit_vals_preffered,sm_size_unit_vals_remained,
-                  (sMemSize-sm_size_coor-sMemSizeTempt),sizeof(ValueT)*(tile_size));
 
-                OffsetT sm_size_vals=sm_size_unit_vals*(tile_size)*sizeof(ValueT);
+                // printf("%d\n",);
+                printf("%d\n",num_merge_items);
+                printf("%d\n",spmv_config.items_per_thread);
+                // printf("%d\n",(sizeof(ValueT)+sizeof(OffsetT))*spmv_config.block_threads);
+                printf("%f\n",(double)sizeof(OffsetT)*spmvParams.num_rows/1024/1024);
+                printf("unchangeable %f KB",(double)unchangeableTempt/1024);
+                printf("<%d,%d>\n",smBlkMatrixNumPreffered,smBlkMatrixUnitNum);
+                printf("SIZE<%f,%f MB,%f MB, %f MB>\n",
+                                (double)MatrixUnitSize,
+                                (double)smBlkMatrixUnitNum*MatrixUnitSize*numSms*numBlocksPerSm/1024/1024,
+                                (double)spmvParams.num_nonzeros*(sizeof(OffsetT)+sizeof(ValueT))/1024/1024,
+                                // (double)(cub::DivideAndRoundUp(spmvParams.num_nonzeros, blk_merge_tile_size)-1)*(256*8*10)/1024/1024
+                                (double)(smBlkMatrixNumPreffered-1)*numSms*numBlocksPerSm*MatrixUnitSize/1024/1024
+                            );
+                printf("<%d,%d>\n",smBlkMatrixNumPreffered,smBlkMatrixUnitNum);
+                // OffsetT smMatrixPreffered=
 
-                OffsetT sm_size_unit_cols_preffered =  cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
-                OffsetT sm_size_unit_cols_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(OffsetT)/(tile_size);/// (AgentSpmvT::ITEMS_PER_THREAD * THREADS_PER_BLOCK);
-                OffsetT sm_size_unit_cols=
-                    min(sm_size_unit_cols_preffered,sm_size_unit_cols_remained);
-                OffsetT sm_size_cols=sm_size_unit_cols*(tile_size)*sizeof(OffsetT);
+                // OffsetT sm_size_unit_thread_coor_preffered = cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
+                // OffsetT sm_size_unit_thread_coor_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(CoordinateT)/THREADS_PER_BLOCK;
+                // OffsetT sm_size_unit_thread_coor =
+                //     min(sm_size_unit_thread_coor_preffered,sm_size_unit_thread_coor_remained);
+                // // sm_size_unit_thread_coor=0;
+
+
+                // OffsetT sm_size_unit_vals_preffered =  cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
+                // OffsetT sm_size_unit_vals_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(ValueT)/(tile_size);/// (AgentSpmvT::ITEMS_PER_THREAD * THREADS_PER_BLOCK);
+                // OffsetT sm_size_unit_vals=
+                //     min(sm_size_unit_vals_preffered,sm_size_unit_vals_remained);
+                // printf("<<%d,%d,%lu,%lu>>",sm_size_unit_vals_preffered,sm_size_unit_vals_remained,
+                //   (sMemSize-sm_size_coor-sMemSizeTempt),sizeof(ValueT)*(tile_size));
+
+                // OffsetT sm_size_vals=sm_size_unit_vals*(tile_size)*sizeof(ValueT);
+
+                // OffsetT sm_size_unit_cols_preffered =  cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x)*sizeof(CoordinateT);
+                // OffsetT sm_size_unit_cols_remained = (sMemSize-sm_size_coor-sMemSizeTempt)/sizeof(OffsetT)/(tile_size);/// (AgentSpmvT::ITEMS_PER_THREAD * THREADS_PER_BLOCK);
+                // OffsetT sm_size_unit_cols=
+                //     min(sm_size_unit_cols_preffered,sm_size_unit_cols_remained);
+                // OffsetT sm_size_cols=sm_size_unit_cols*(tile_size)*sizeof(OffsetT);
 
 
                 // OffsetT sm_size_unit = MAX(SharedMemoryUsed - sMemSizeTempt - sm_size_coor,0);
                 // sm_size_unit = sm_size_unit/sizeof(ValueT);
                 // sm_size_unit = sm_size_unit/THREADS_PER_BLOCK;
 
-                OffsetT sm_size_unit_r_remained=MAX(sMemSize-sm_size_coor-sMemSizeTempt,0)/sizeof(ValueT)/(THREADS_PER_BLOCK);
-                printf("<<<<<%d,%lu,%d,%lu>>>>>",sm_size_unit_r_remained,sMemSize,sm_size_coor,sMemSizeTempt);
-                // OffsetT sm_size_unit_r=sm_size_unit;
-                OffsetT sm_size_unit_r_preffered = cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK;
-                OffsetT sm_size_unit_r = MIN(sm_size_unit_r_remained,sm_size_unit_r_preffered);
+                // OffsetT sm_size_unit_r_remained=MAX(sMemSize-sm_size_coor-sMemSizeTempt,0)/sizeof(ValueT)/(THREADS_PER_BLOCK);
+                // printf("<<<<<%d,%lu,%d,%lu>>>>>",sm_size_unit_r_remained,sMemSize,sm_size_coor,sMemSizeTempt);
+                // // OffsetT sm_size_unit_r=sm_size_unit;
+                // OffsetT sm_size_unit_r_preffered = cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK;
+                // OffsetT sm_size_unit_r = MIN(sm_size_unit_r_remained,sm_size_unit_r_preffered);
                 
-                OffsetT sm_size_total_r=sm_size_unit_r*numBlocksPerSm*numSms*THREADS_PER_BLOCK*sizeof(ValueT);
-                #ifdef VECX
-                    OffsetT sm_size_unit_x_remained=sm_size_unit_r_remained;                
-                #else 
-                    OffsetT sm_size_unit_x_remained=sm_size_unit_r_remained-sm_size_unit_r;
-                #endif
-                OffsetT sm_size_unit_x_preffered = cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK;
-                OffsetT sm_size_unit_x = MIN(sm_size_unit_x_remained,sm_size_unit_x_preffered);
-                OffsetT sm_size_total_x=sm_size_unit_x*numBlocksPerSm*numSms*THREADS_PER_BLOCK*sizeof(ValueT);
+                // OffsetT sm_size_total_r=sm_size_unit_r*numBlocksPerSm*numSms*THREADS_PER_BLOCK*sizeof(ValueT);
+                // #ifdef VECX
+                //     OffsetT sm_size_unit_x_remained=sm_size_unit_r_remained;                
+                // #else 
+                //     OffsetT sm_size_unit_x_remained=sm_size_unit_r_remained-sm_size_unit_r;
+                // #endif
+                // OffsetT sm_size_unit_x_preffered = cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK;
+                // OffsetT sm_size_unit_x = MIN(sm_size_unit_x_remained,sm_size_unit_x_preffered);
+                // OffsetT sm_size_total_x=sm_size_unit_x*numBlocksPerSm*numSms*THREADS_PER_BLOCK*sizeof(ValueT);
                 
                 // printf("<<<%d/%d,%d/%d>>>>\n",sm_size_unit_r,sm_size_unit_r_preffered,sm_size_unit_x,sm_size_unit_x_preffered);
                 // printf("unit coors is %d/%d\n",sm_size_unit_thread_coor, sm_size_unit_thread_coor_preffered);
                 // printf("unit values is %d/%d\n",sm_size_unit_vals, sm_size_unit_vals_preffered);
 
-                int blockCountSMX = cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);
+                int blockCountSMX = cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x);
+                // int blockCountSMX = cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);
 
                 // printf("total sm mem is %d\n",sMemSize);
-                // printf("numtiles:%d\n",num_merge_tiles);
+                // printf("numtiles:%d\n",blk_num_merge_tiles);
                 // printf("BlckPerSM:%d\n",numBlocksPerSm);
-                // printf("DataPerSm:%d\n",cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x));
+                // printf("DataPerSm:%d\n",cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x));
                 // printf("ThreadPerBlock:%d\n",THREADS_PER_BLOCK);
 
                 // SMCacheParams<OffsetT,size_t> smParamsT;
@@ -772,30 +809,34 @@ struct DispatchCG
                     smParamsT.sm_size_total_coor=sm_size_coor*dimGrid.x;
                     smParamsT.sm_size_unit_coor=sm_coor;
                     
-                    smParamsT.sm_size_thread_coor=THREADS_PER_BLOCK*sm_size_unit_thread_coor*sizeof(CoordinateT);
-                    smParamsT.sm_size_total_thread_coor=smParamsT.sm_size_thread_coor*dimGrid.x;
-                    smParamsT.sm_size_unit_thread_coor=sm_size_unit_thread_coor;//cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
+                    smParamsT.sm_size_unit_matrix=MatrixUnitSize;
+                    smParamsT.sm_size_blocktile_matrix=MatrixUnitSize* spmv_config.block_threads;
+                    smParamsT.sm_num_matrixperblk=smBlkMatrixUnitNum;
+                    smParamsT.sm_size_blocktile_total_matrix=smBlkMatrixUnitNum*smParamsT.sm_size_blocktile_matrix;
+                    // smParamsT.sm_size_thread_coor=THREADS_PER_BLOCK*sm_size_unit_thread_coor*sizeof(CoordinateT);
+                    // smParamsT.sm_size_total_thread_coor=smParamsT.sm_size_thread_coor*dimGrid.x;
+                    // smParamsT.sm_size_unit_thread_coor=sm_size_unit_thread_coor;//cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
 
 
-                    smParamsT.sm_size_vals = sm_size_vals;
-                    smParamsT.sm_size_total_vals = sm_size_vals*dimGrid.x;
-                    smParamsT.sm_size_unit_vals=sm_size_unit_vals;//cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
+                    // smParamsT.sm_size_vals = sm_size_vals;
+                    // smParamsT.sm_size_total_vals = sm_size_vals*dimGrid.x;
+                    // smParamsT.sm_size_unit_vals=sm_size_unit_vals;//cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
 
-                    smParamsT.sm_size_cols = sm_size_cols;
-                    smParamsT.sm_size_total_cols = sm_size_cols*dimGrid.x;
-                    smParamsT.sm_size_unit_cols=sm_size_unit_cols;//cub::DivideAndRoundUp(num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
+                    // smParamsT.sm_size_cols = sm_size_cols;
+                    // smParamsT.sm_size_total_cols = sm_size_cols*dimGrid.x;
+                    // smParamsT.sm_size_unit_cols=sm_size_unit_cols;//cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);//*sizeof(CoordinateT);
 
                     // smParamsT.sm_size_unit_r=sm_size_unit_r;
                     // smParamsT.sm_size_unit_x=sm_size_unit_x;
                     // smParamsT.sm_size_unit_mat=sm_size_unit_mat;
-                    smParamsT.sm_size_unit_r=sm_size_unit_r;
-                    smParamsT.sm_size_total_r=sm_size_total_r;
-                    smParamsT.sm_size_unit_x=sm_size_unit_x;
-                    smParamsT.sm_size_total_x=sm_size_total_x;
+                    // smParamsT.sm_size_unit_r=sm_size_unit_r;
+                    // smParamsT.sm_size_total_r=sm_size_total_r;
+                    // smParamsT.sm_size_unit_x=sm_size_unit_x;
+                    // smParamsT.sm_size_total_x=sm_size_total_x;
 
                     smParamsT.sMemSize=sMemSize;
-                    smParamsT.sMemSizeTempt=launcableTmep;
-                    smParamsT.sMemSizeTemptTotal=launcableTmep+unchangeableTempt;
+                    smParamsT.sMemSizeTempt=sMemSizeTempt;
+                    smParamsT.sMemSizeTemptTotal=sMemSizeTempt;
                 // cudaFuncSetAttribute(perk_cg_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,  sMemSize);
                 // checkCudaErrors(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                 //     &numBlocksPerSm, perk_cg_kernel, numThreads, sMemSize));
@@ -823,12 +864,12 @@ struct DispatchCG
                         int num_merge_items = spmvParams.num_rows + spmvParams.num_nonzeros;
 
                         // Tile sizes of kernels
-                        int merge_tile_size             = spmv_config.block_threads * spmv_config.items_per_thread;
+                        int blk_merge_tile_size             = spmv_config.block_threads * spmv_config.items_per_thread;
                         int segment_fixup_tile_size     = segment_fixup_config.block_threads * segment_fixup_config.items_per_thread;
 
                         // Number of tiles for kernels
-                        int num_merge_tiles            = cub::DivideAndRoundUp(num_merge_items, merge_tile_size);
-                        int num_segment_fixup_tiles    = cub::DivideAndRoundUp(num_merge_tiles, segment_fixup_tile_size);
+                        int blk_num_merge_tiles            = cub::DivideAndRoundUp(num_merge_items, blk_merge_tile_size);
+                        int num_segment_fixup_tiles    = cub::DivideAndRoundUp(blk_num_merge_tiles, segment_fixup_tile_size);
 
                         //int blk_max;//=sm_count*2048/64;
                         //cudaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -854,8 +895,8 @@ struct DispatchCG
                         // Get the temporary storage allocation requirements
                         size_t allocation_sizes[3];
                         if (CubDebug(error = ScanTileStateT::AllocationSize(num_segment_fixup_tiles, allocation_sizes[0]))) break;    // bytes needed for reduce-by-key tile status descriptors
-                        allocation_sizes[1] = num_merge_tiles * sizeof(KeyValuePairT);       // bytes needed for block carry-out pairs
-                        allocation_sizes[2] = (num_merge_tiles + 1) * sizeof(CoordinateT);   // bytes needed for tile starting coordinates
+                        allocation_sizes[1] = blk_num_merge_tiles * sizeof(KeyValuePairT);       // bytes needed for block carry-out pairs
+                        allocation_sizes[2] = (blk_num_merge_tiles + 1) * sizeof(CoordinateT);   // bytes needed for tile starting coordinates
 
                         printf("<%lu,%lu,%lu>\n",allocation_sizes[0],allocation_sizes[1],allocation_sizes[2]);
 
@@ -878,21 +919,18 @@ struct DispatchCG
 
                         // Get search/init grid dims
                         int search_block_size   = 32;
-                        int search_grid_size    = cub::DivideAndRoundUp(num_merge_tiles + 1, search_block_size);
+                        int search_grid_size    = cub::DivideAndRoundUp(blk_num_merge_tiles + 1, search_block_size);
 
 
                         // if (search_grid_size < sm_count)
-                        // if (num_merge_tiles < spmv_sm_occupancy * sm_count)
+                        // if (blk_num_merge_tiles < spmv_sm_occupancy * sm_count)
                         {
                             // Not enough spmv tiles to saturate the device: have spmv blocks search their own staring coords
                         //     d_tile_coordinates = NULL;
                         //     // assert(0);
-                        // }
-                        // else
-                        // {
-
+                        // }blockCountSMX
                             spmv_search_kernel<<<search_grid_size, search_block_size, 0, stream>>>
-                                (num_merge_tiles,
+                                (blk_num_merge_tiles,
                                     d_tile_coordinates,
                                     spmvParams);
                         }
@@ -901,7 +939,7 @@ struct DispatchCG
                                 (void *)&spmvParams,
                                 (void *)&d_tile_coordinates,
                                 (void *)&d_tile_carry_pairs,
-                                (void *)&num_merge_tiles,
+                                (void *)&blk_num_merge_tiles,
                                 (void *)&tile_state,
                                 (void *)&num_segment_fixup_tiles,
                                 // (void *)&num_segment_fixup_tiles,
