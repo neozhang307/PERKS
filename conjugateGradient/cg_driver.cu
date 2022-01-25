@@ -300,8 +300,8 @@ void myTest(
         // smParamsT.sm_size_total_thread_coor, 
         // smParamsT.sm_size_total_vals, 
         // smParamsT.sm_size_total_cols, 
-        smParamsT.sm_size_total_r, 
-        smParamsT.sm_size_total_x, 
+        smParamsT.sm_num_r, 
+        smParamsT.sm_blk_size_r, 
 
         time, total_iter);
   size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);

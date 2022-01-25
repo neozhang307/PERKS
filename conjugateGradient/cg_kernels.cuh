@@ -79,11 +79,11 @@ struct SMCacheParams
     // OffsetT sm_size_unit_cols;
     // OffsetT sm_size_total_cols;
 
-    OffsetT sm_size_unit_r;
-    OffsetT sm_size_total_r;
-    OffsetT sm_size_unit_x;
-    OffsetT sm_size_total_x;
-    OffsetT sm_size_unit_mat;
+    OffsetT sm_num_r;
+    OffsetT sm_blk_size_r;
+    // OffsetT sm_size_unit_x;
+    // OffsetT sm_size_total_x;
+    // OffsetT sm_size_unit_mat;
     OffsetTLarge sMemSize;
     OffsetTLarge sMemSizeTempt;
     OffsetTLarge sMemSizeTemptTotal;
@@ -109,7 +109,227 @@ namespace cub {
 
 template <typename        ValueT,
           typename        OffsetT>
-__device__ void gpuSaxpy_cub(ValueT *x, ValueT *y, ValueT a, OffsetT size,
+__device__ void gpuSaxpy_perk(ValueT *x, OffsetT x_start, OffsetT x_stop, OffsetT x_step,
+                              ValueT *y, OffsetT y_start, OffsetT y_stop, OffsetT y_step,
+                              ValueT a) {
+  _Pragma("unroll")
+  for(int x_ind=x_start, y_ind=y_start; 
+    x_ind<x_stop&&y_ind<y_stop; 
+    x_ind+=x_step, y_ind+=y_step)
+  {
+    y[y_ind] = a * x[x_ind] + y[y_ind];
+  }
+}
+
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ void gpuSaxpy_perk(ValueT *x, 
+                              ValueT *y, OffsetT start, OffsetT stop, OffsetT step,
+                              ValueT a) {
+  _Pragma("unroll")
+  for(int ind=start; ind<stop; ind+=step)
+  {
+    y[ind] = a * x[ind] + y[ind];
+  }
+}
+
+
+
+
+#define gpuSaxpy_perk_reg(x,x_start,x_step,y,y_start,y_step,size,a) \
+do{\
+  _Pragma("unroll")\
+  for(int i=0; i<size; i++)\
+  {\
+    int y_ind= y_start+i*y_step;\
+    int x_ind= x_start+i*x_step;\
+    y[y_ind] = a * x[x_ind] + y[y_ind];\
+  }\
+}while(0)
+
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ void gpuDotProduct_perk_pre( ValueT *vecA, OffsetT A_start, OffsetT A_stop, OffsetT A_step,
+                                        ValueT *vecB, OffsetT B_start, OffsetT B_stop, OffsetT B_step,
+                              double &temp_sum) {
+  _Pragma("unroll")
+  for(int A_ind=A_start, B_ind=B_start; 
+    A_ind<A_stop&&B_ind<B_stop; 
+    A_ind+=A_step, B_ind+=B_step)
+  {
+    temp_sum += static_cast<double>(vecA[A_ind] * vecB[B_ind]);
+  }
+}
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ void gpuDotProduct_perk_pre( ValueT *vecA, 
+                                        ValueT *vecB, OffsetT start, OffsetT stop, OffsetT step,
+                              double &temp_sum) {
+  _Pragma("unroll")
+  for(int ind=start; ind<stop; ind+=step)
+  {
+    temp_sum += static_cast<double>(vecA[ind] * vecB[ind]);
+  }
+}
+
+// #define gpuDotProduct_perk_pre(vecA,A_start,A_stop,A_step, vecB,B_start,B_stop,B_step, temp_sum)\
+// do{\
+//   _Pragma("unroll")\
+//   for(int A_ind=A_start, B_ind=B_start; \
+//     A_ind<A_stop&&B_ind<B_stop; \
+//     A_ind+=A_step, B_ind+=B_step)\
+//   {\
+//     temp_sum += static_cast<double>(vecA[A_ind] * vecB[B_ind]);\
+//   }\
+// }while(0)
+
+
+#define gpuDotProduct_perk_pre_reg(vecA, A_start, A_step, vecB,B_start, B_step, size, temp_sum)\
+do{\
+  _Pragma("unroll")\
+   for(int i=0; i<size; i++)\
+  {\
+    int A_ind= A_start+i*A_step;\
+    int B_ind= B_start+i*B_step;\
+    if(A_ind>=N||B_ind>=N)break;\
+    temp_sum += static_cast<double>(vecA[A_ind] * vecB[B_ind]);\
+  }\
+}while(0)
+
+// template <typename        ValueT,
+          // typename        OffsetT>
+__device__ void gpuDotProduct_perk_post(double *result, double &temp_sum,
+                                          const cg::thread_block &cta, 
+                                          double * tmp, const cg::grid_group &grid) {
+  cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
+
+  temp_sum = cg::reduce(tile32, temp_sum, cg::plus<double>());
+
+  if (tile32.thread_rank() == 0) {
+    tmp[tile32.meta_group_rank()] = temp_sum;
+  }
+  // cg::sync(grid);
+  cta.sync();
+
+  if (tile32.meta_group_rank() == 0) {
+    //32x32=1024(max of threaddim)
+     temp_sum = tile32.thread_rank() < tile32.meta_group_size() ? tmp[tile32.thread_rank()] : 0.0;
+     temp_sum = cg::reduce(tile32, temp_sum, cg::plus<double>());
+
+    if (tile32.thread_rank() == 0) {
+      atomicAdd(result, temp_sum);
+    }
+  }
+}
+
+
+
+__device__ void gpuCopyVector_perk(float *x, int x_start, int x_stop, int x_step,
+                              float *y, int y_start, int y_stop, int y_step) {
+  // for (int i = 0; i < size; i += step) 
+  _Pragma("unroll")
+  for(int x_ind=x_start, y_ind=y_start; 
+    x_ind<x_stop&&y_ind<y_stop; 
+    x_ind+=x_step, y_ind+=y_step)
+  {
+    y[y_ind] = x[x_ind];
+  }
+}
+
+
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ void gpuCopyVector_perk(ValueT *x, //int x_start, int x_stop, int x_step,
+                              ValueT *y, OffsetT start, OffsetT stop, OffsetT step) {
+  // for (int i = 0; i < size; i += step) 
+  _Pragma("unroll")
+  for(int ind=start; ind<stop; ind+=step)
+  {
+    y[ind] = x[ind];
+  }
+}
+
+// #define gpuCopyVector_perk(x,x_start,x_stop,x_step,y,y_start,y_stop,y_step) \
+do{\
+  _Pragma("unroll")\
+  for(int x_ind=x_start, y_ind=y_start; \
+    x_ind<x_stop&&y_ind<y_stop; \
+    x_ind+=x_step, y_ind+=y_step)\
+  {\
+    y[y_ind] = x[x_ind];\
+  }\
+}while(0) 
+
+
+#define gpuCopyVector_perk_reg(x,x_start,x_step,y,y_start,y_step,size) \
+do{\
+  _Pragma("unroll")\
+  for(int i=0; i<size; i++)\
+  {\
+    int y_ind= y_start+i*y_step;\
+    int x_ind= x_start+i*x_step;\
+    if(x_ind>=N||y_ind>=N)break;\
+    y[y_ind] = x[x_ind];\
+  }\
+}while(0)
+
+__device__ void gpuScaleVectorAndSaxpy_perk(float *x, int x_start, int x_stop, int x_step,
+                              float *y, int y_start, int y_stop, int y_step,
+                              float a, float scale) {
+  // for (int i = 0; i < size; i += step) 
+  _Pragma("unroll")
+  for(int x_ind=x_start, y_ind=y_start; 
+    x_ind<x_stop&&y_ind<y_stop; 
+    x_ind+=x_step, y_ind+=y_step)
+  {
+    y[y_ind] = a * x[x_ind] + scale * y[y_ind];
+  }
+}
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ void gpuScaleVectorAndSaxpy_perk(ValueT *x, 
+                              ValueT *y, OffsetT start, OffsetT stop, OffsetT step,
+                              ValueT a, ValueT scale) {
+  // for (int i = 0; i < size; i += step) 
+  _Pragma("unroll")
+  for(OffsetT ind=start; ind<stop; ind+=step)
+  {
+    y[ind] = a * x[ind] + scale * y[ind];
+  }
+}
+
+
+// #define gpuScaleVectorAndSaxpy_perk(x,x_start,x_stop,x_step,y,y_start,y_stop,y_step  , a, scale) \
+// do{\
+//   _Pragma("unroll")\
+//   for(int x_ind=x_start, y_ind=y_start; \
+//     x_ind<x_stop&&y_ind<y_stop; \
+//     x_ind+=x_step, y_ind+=y_step)\
+//   {\
+//     y[y_ind] = a * x[x_ind] + scale * y[y_ind];\
+//   }\
+// }while(0) 
+
+#define gpuScaleVectorAndSaxpy_perk_reg(x,x_start,x_step,   \
+                                        y,y_start,y_step,   \
+                                        size, \
+                                        a, scale) \
+do{\
+  _Pragma("unroll")\
+  for(int i=0; i<size; i++)\
+  {\
+    int y_ind= y_start+i*y_step;\
+    int x_ind= x_start+i*x_step;\
+    if(x_ind>=N||y_ind>=N)break;\
+    y[y_ind] = a * x[x_ind] + scale * y[y_ind];\
+  }\
+}while(0) 
+
+
+
+template <typename        ValueT,
+          typename        OffsetT>
+__device__ __forceinline__ void gpuSaxpy_cub(ValueT *x, ValueT *y, ValueT a, OffsetT size,
                          const cg::grid_group &grid) {
   for (int i = grid.thread_rank(); i < size; i += grid.size()) {
     y[i] = a * x[i] + y[i];
@@ -119,7 +339,7 @@ __device__ void gpuSaxpy_cub(ValueT *x, ValueT *y, ValueT a, OffsetT size,
 
 template <typename        ValueT,
           typename        OffsetT>
-__device__ void gpuDotProduct_cub(ValueT *vecA, ValueT *vecB, double *result,
+__device__ __forceinline__ void gpuDotProduct_cub(ValueT *vecA, ValueT *vecB, double *result,
                               OffsetT size, const cg::thread_block &cta,
                               double * tmp,
                               const cg::grid_group &grid) {
@@ -138,7 +358,8 @@ __device__ void gpuDotProduct_cub(ValueT *vecA, ValueT *vecB, double *result,
     tmp[tile32.meta_group_rank()] = temp_sum;
   }
 
-  cg::sync(cta);
+//   cg::sync(cta);
+  cta.sync();
 
   if (tile32.meta_group_rank() == 0) {
      temp_sum = tile32.thread_rank() < tile32.meta_group_size() ? tmp[tile32.thread_rank()] : 0.0;
@@ -152,7 +373,7 @@ __device__ void gpuDotProduct_cub(ValueT *vecA, ValueT *vecB, double *result,
 
 template <typename        ValueT,
           typename        OffsetT>
-__device__ void gpuCopyVector_cub(ValueT *srcA, ValueT *destB, OffsetT size,
+__device__ __forceinline__ void gpuCopyVector_cub(ValueT *srcA, ValueT *destB, OffsetT size,
                               const cg::grid_group &grid) {
   for (int i = grid.thread_rank(); i < size; i += grid.size()) {
     destB[i] = srcA[i];
@@ -160,7 +381,7 @@ __device__ void gpuCopyVector_cub(ValueT *srcA, ValueT *destB, OffsetT size,
 }
 template <typename        ValueT,
           typename        OffsetT>
-__device__ void gpuScaleVectorAndSaxpy_cub(const ValueT *x, ValueT *y, ValueT a, ValueT scale, OffsetT size,
+__device__ __forceinline__ void gpuScaleVectorAndSaxpy_cub(const ValueT *x, ValueT *y, ValueT a, ValueT scale, OffsetT size,
                          const cg::grid_group &grid) {
   for (int i = grid.thread_rank(); i < size; i += grid.size()) {
     y[i] = a * x[i] + scale * y[i];
@@ -409,11 +630,12 @@ template <
     // typename    PairsInputIteratorT,            ///< Random-access input iterator type for keys
     typename    AggregatesOutputIteratorT,
     bool isBaseline=true,
-    bool cacheMatrix=true 
+    bool cacheMatrix=true,
+    bool cacheVector=true 
     >//,      ///< Random-access output iterator type for values
     // typename    OffsetT,                        ///< Signed integer type for global offsets
             // typename    ScanTileStateT>                 ///< Tile status interface type
-__launch_bounds__(256)
+__launch_bounds__(256,2)
 __global__ void gpuConjugateGradient_cub
 (
     SpmvParams<ValueT, OffsetT>     spmv_params,                ///< [in] SpMV input parameter bundle
@@ -480,7 +702,18 @@ __global__ void gpuConjugateGradient_cub
     typename AgentSpmvT::MatrixTileUnit* matrixunits 
             = 
             (typename AgentSpmvT::MatrixTileUnit*)(tmp_ori+smParamsT.sm_size_coor+smParamsT.sMemSizeTempt);
-
+    
+    ValueT * sm_r = (ValueT*)(matrixunits+smParamsT.sm_num_matrixperblk); 
+    const unsigned int g_start =grid.thread_rank(); 
+    const unsigned int sm_num_r=smParamsT.sm_num_r;
+    const unsigned int g_sm_r_middle= g_start+sm_num_r*grid.size();
+    const int sm_r_start = cta.thread_rank();//grid.thread_rank(); 
+    const int g_step  = grid.size();//grid.size();
+    const int b_step  = cta.size();
+    // for(int i=0; i<sm_num_r; i++)
+    // {
+    //     sm_r[i*blockDim.x+threadIdx.x]=sm_r_start;
+    // }
     //LINGQI:
     /*
         I tried to merge all temp space (doable). 
@@ -520,6 +753,11 @@ __global__ void gpuConjugateGradient_cub
                     matrixunits,
                     smParamsT.sm_num_matrixperblk);
             }
+            // if(threadIdx.x==0)
+            // {
+            //     printf("<%d,%d,%d,%d,%d>",sm_id,smParamsT.sm_size_unit_coor,num_merge_tiles/gridDim.x,num_merge_tiles,gridDim.x);
+            // }
+            // return;
             // assert(false);
             // return;
         }
@@ -546,28 +784,90 @@ __global__ void gpuConjugateGradient_cub
     cg::sync(grid);
     spmv_params.d_vector_x=p;
 
-    gpuSaxpy_cub(Ax, r, alpham1, N, grid);
+    // 
+    if(cacheVector)
+    {
+        gpuCopyVector_perk_reg(
+        r, g_start, g_step, 
+        sm_r,  sm_r_start, b_step,  sm_num_r);
+        
+        cg::sync(grid);
+        
+        gpuSaxpy_perk_reg(Ax, g_start, g_step,
+        sm_r,  sm_r_start, b_step,  sm_num_r,
+        alpham1); 
+
+        gpuSaxpy_perk<ValueT,OffsetT> (Ax, //g_sm_middle, g_end, g_step,
+                r,   g_sm_r_middle, N, grid.size(),
+                alpham1);
+    }
+    else
+    {
+        gpuSaxpy_cub(Ax, r, alpham1, N, grid);
+    }
+    // cta.sync();
+
 
     cg::sync(grid);
 
-    gpuDotProduct_cub(r, r, dot_result, N, cta, tmp, grid);
+    // 
+    if(cacheVector)
+    {
+        double temp_sum=0.0;
+        gpuDotProduct_perk_pre_reg(sm_r,  sm_r_start,b_step,
+                            sm_r,  sm_r_start, b_step, sm_num_r ,
+                            temp_sum);
+        gpuDotProduct_perk_pre<ValueT,OffsetT>(r, // g_sm_middle, g_end, g_step,
+                                r,   g_sm_r_middle, N, g_step,
+                                temp_sum);
 
+
+        gpuDotProduct_perk_post(dot_result, temp_sum, cta,tmp,grid);
+
+    }
+    else
+    {
+        gpuDotProduct_cub(r, r, dot_result, N, cta, tmp, grid);
+    }
     cg::sync(grid);
 
     r1 = *dot_result;
 
     int k = 1;
     while (r1 > tol * tol && k <= max_iter) {
-    // while (k <= max_iter) {
+    // while (k <= 100) {
             if (k > 1) {
                 b = r1 / r0;
                 //v(r)+p(p)->v(p)
-                gpuScaleVectorAndSaxpy_cub(r, p, alpha, b, N, grid);
+                // 
+                if(cacheVector)
+                {
+                    gpuScaleVectorAndSaxpy_perk_reg(sm_r,  sm_r_start, b_step,  
+                                        p,  g_start, g_step, sm_num_r,
+                                        alpha, b);
+                    gpuScaleVectorAndSaxpy_perk<ValueT,OffsetT>(r,  
+                                            p,   g_sm_r_middle, N, grid.size(),
+                                            alpha, b);
+                }
+                else
+                {
+                    gpuScaleVectorAndSaxpy_cub(r, p, alpha, b, N, grid);
+                }
                 // gpuCopyVector_cub(r, p, N, grid);
             } else {
             //v(r)->v(p)
-            gpuCopyVector_cub(r, p, N, grid);
-        
+            // 
+            if(cacheVector)
+            {
+                gpuCopyVector_perk_reg(sm_r,  sm_r_start, b_step, 
+                      p,  g_start, g_step, sm_num_r);
+                gpuCopyVector_perk<ValueT,OffsetT>(r,
+                                p,   g_sm_r_middle, N, g_step);
+            }
+            else
+            {
+                gpuCopyVector_cub(r, p, N, grid);
+            }
         }
         if (threadIdx.x == 0 && blockIdx.x == 0){ dot_result[1] = 0.0;dot_result[0]=0.0;}
         cg::sync(grid);
@@ -629,21 +929,60 @@ __global__ void gpuConjugateGradient_cub
         cg::sync(grid);
 
         a = r1 / *(dot_result+1);
-        //v(p)+v(p)->v(a)
-        gpuSaxpy_cub(p, x, a, N, grid);
+        //v(p)+v(x)->v(x)
+        // gpuSaxpy_cub(p, x, a, N, grid);
         na = -a;
         //v(Ax)+v(r)->v(na)
-        gpuSaxpy_cub(Ax, r, na, N, grid);
+        // 
+        if(cacheVector)
+        {
+            gpuSaxpy_perk_reg(Ax,  g_start, g_step,
+                    sm_r, sm_r_start, b_step, sm_num_r,
+                    na);
+
+            gpuSaxpy_perk<ValueT,OffsetT>(Ax,  //g_sm_middle, g_end, g_step,
+                        r,  g_sm_r_middle, N, grid.size(),
+                        na);
+        }
+        else
+        {
+            gpuSaxpy_cub(Ax, r, na, N, grid);
+        }
         // if(threadIdx.x==0&&blockIdx.x==0)printf("<%f,%f>",);
         r0 = r1;
-        gpuDotProduct_cub(r, r, (dot_result), N, cta, tmp, grid);
+        // 
+        if(cacheVector)
+        {
+            double temp_sum=0.0;
+            gpuDotProduct_perk_pre_reg(sm_r,  sm_r_start,  b_step, 
+                                sm_r,  sm_r_start,  b_step, sm_num_r,
+                                temp_sum);
+
+            gpuDotProduct_perk_pre<ValueT,OffsetT>(r, // g_sm_middle, g_end, g_step,
+                                    r,   g_sm_r_middle, N, g_step,
+                                    temp_sum);
+            
+            gpuDotProduct_perk_post(dot_result, temp_sum, cta,tmp,grid);
+        }
+        else
+        {
+            gpuDotProduct_cub(r, r, (dot_result), N, cta, tmp, grid);
+        }
         cg::sync(grid);
 
         r1 = *(dot_result);
         k++;
         // if(threadIdx.x==0&&blockIdx.x==0)printf("<%e>",r1);
     }
+    gpuSaxpy_cub(p, x, a, N, grid);
     if(threadIdx.x==0&&blockIdx.x==0)iteration[0]=k;
+    if(cacheVector)
+    {
+        gpuCopyVector_perk_reg(
+            sm_r,  sm_r_start, b_step,  
+            r, g_start, g_step, 
+            sm_num_r);
+    }
 
 }
 
