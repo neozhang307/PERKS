@@ -18,10 +18,14 @@
 #include "./genconfig.cuh"
 #endif
 
+
 //#ifndef REAL
 //#define REAL float
 //#endif
 //configuration
+#if defined(NAIVENVCC)
+  #define NAIVE
+#endif
 #if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
   #define TRADITIONLAUNCH
 #endif
@@ -388,25 +392,29 @@ else
     printf("code is run in %d\n",ptx);
   #endif
 /*************************************/
-  if(ptx<800&&async==true)
-  {
-    printf("error async not support\n");//lower ptw not support 
-    return -1;
-  }
+  // if(ptx<800&&async==true)
+  // {
+  //   printf("error async not support\n");//lower ptw not support 
+  //   return -1;
+  // }
 //initialization
 #if defined(PERSISTENT)
 
   #ifndef BOX
-  auto execute_kernel = async?kernel_persistent_baseline_async<REAL,RTILE_Y,HALO>: kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+  // auto execute_kernel = async?kernel_persistent_baseline_async<REAL,RTILE_Y,HALO>: kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
   #else
-  auto execute_kernel = async?kernel_persistent_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+  // auto execute_kernel = async?kernel_persistent_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #if defined(BASELINE_CM)||defined(BASELINE)
   #ifndef BOX
-    auto execute_kernel = async?kernel_baseline_async<REAL,RTILE_Y,HALO>:kernel_baseline<REAL,RTILE_Y,HALO>;
+    // auto execute_kernel = async?kernel_baseline_async<REAL,RTILE_Y,HALO>:kernel_baseline<REAL,RTILE_Y,HALO>;
+    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
   #else
-    auto execute_kernel = async?kernel_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_baseline_box<REAL,RTILE_Y,HALO>;
+    // auto execute_kernel = async?kernel_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_baseline_box<REAL,RTILE_Y,HALO>;
+    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #ifdef NAIVE
@@ -418,17 +426,23 @@ else
 #endif 
 #ifdef GEN
   #ifndef BOX
-    auto execute_kernel = async?
-          (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-          kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-          :
-          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+    // auto execute_kernel = async?
+    //       (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+    //       kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+    //       :
+    //       (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+    //         kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
+    auto execute_kernel = (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
             kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
   #else
-    auto execute_kernel = async?
-          (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-            kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-            :
+    // auto execute_kernel = async?
+    //       (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+    //         kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+    //         :
+    //       (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+    //         kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+    //       ;
+    auto execute_kernel = 
           (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
             kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           ;
@@ -483,9 +497,9 @@ else
   int maxSharedMemory;
   cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
   //could not use all share memory in a100. so set it in default.
-  int SharedMemoryUsed = maxSharedMemory-1024;
 
 #if defined(USEMAXSM)
+  int SharedMemoryUsed = maxSharedMemory-1024;
   cudaFuncSetAttribute(execute_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
 #endif
 
@@ -516,8 +530,8 @@ size_t executeSM = 0;
     // printf("");
     printf("blk per sm is %d/%d %d in sm %f\n", numBlocksPerSm_current,blkpsm,bdimx,(double)executeSM/1024);
   #endif
-  int smbound=SharedMemoryUsed/executeSM;
-  printf("%d,%d,%d\n",numBlocksPerSm_current,blkpsm,smbound);
+  // int smbound=SharedMemoryUsed/executeSM;
+  // printf("%d,%d,%d\n",numBlocksPerSm_current,blkpsm,smbound);
   if(blkpsm!=0)
   {
     
@@ -755,7 +769,9 @@ if(usewarmup){
   printf("%d\t<%d,%d>\t%d\t",executeBlockDim.x,
         executeGridDim.x,executeGridDim.y,
         (executeGridDim.x)*(executeGridDim.y)/sm_count);
+  #ifndef NAIVE
   printf("%f\t",(double)sharememory_basic/1024);
+  #endif
 #endif
 
 #ifdef _TIMER_

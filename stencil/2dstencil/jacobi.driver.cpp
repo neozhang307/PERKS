@@ -71,6 +71,10 @@ int main(int argc, char  *argv[])
   args.GetCmdLineArgument("iter", iteration);
   args.GetCmdLineArgument("warmiter", warmupiteration);
   args.GetCmdLineArgument("blkpsm", blkpsm);
+  if(async)
+  {
+    printf("removed because no performance benefit\n");
+  }
   if(bdimx==0)bdimx=256;
   if(iteration==0)iteration=3;
 
