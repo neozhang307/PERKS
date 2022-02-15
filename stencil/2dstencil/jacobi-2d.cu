@@ -18,6 +18,9 @@
 #include "./genconfig.cuh"
 #endif
 
+#ifdef GENWRSMALL
+#define GENWR
+#endif
 
 //#ifndef REAL
 //#define REAL float

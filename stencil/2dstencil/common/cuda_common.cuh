@@ -172,7 +172,7 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
     else
     {
       l_global_y=(MIN(global_y_base+l_y,global_y_size-1));
-      l_global_y=(MAX(l_global_y,0));
+      // l_global_y=(MAX(l_global_y,0));
     }
   
     #define  dst_ind (l_y+sm_y_base)*sm_width
@@ -216,6 +216,80 @@ __device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer,
   
   #undef dst_ind
 }
+
+
+template<class REAL, int halo, int size, bool isInit=false, bool isLast=false, bool sync=true>
+__device__ void __forceinline__ global2sm(REAL* src, REAL* sm_buffer, 
+                                              
+                                              int global_y_base, int global_y_size,
+                                              int global_x_base, int global_x_size,
+                                              int sm_y_base, int sm_x_base, int sm_width,
+                                              int tid,
+                                              int west,
+                                              int east)
+{
+  //fill shared memory buffer
+  _Pragma("unroll")
+  for(int l_y=0; l_y<size; l_y++)
+  {
+    int l_global_y;
+    if(isInit)
+    {
+      l_global_y=(MAX(global_y_base+l_y,0));
+      // l_global_y=(global_y_base);
+    }
+    else if(isLast)
+    {
+      l_global_y=(MIN(global_y_base+l_y,global_y_size-1));
+    //   // l_global_y=(MAX(l_global_y,0));
+    }
+    else
+    {
+      l_global_y=(global_y_base+l_y);
+    }
+  
+    #define  dst_ind (l_y+sm_y_base)*sm_width
+    
+    #ifndef ASYNCSM
+      sm_buffer[dst_ind-halo+tid+sm_x_base]=src[l_global_y * global_x_size + west];//MAX(global_x_base-halo+tid,0)];
+      if(halo>0)
+      {
+        if(tid<halo*2)
+        {  
+          sm_buffer[dst_ind-halo+tid+blockDim.x+sm_x_base]=src[(l_global_y) * global_x_size + east];//MIN(-halo+tid+blockDim.x+global_x_base, global_x_size-1)];
+        }
+      }
+    #else
+      #if PERKS_ARCH>=800 
+        __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+sm_x_base, 
+              src + (l_global_y) * global_x_size + west //MAX(global_x_base-halo+tid,0)
+                , sizeof(REAL));
+        if(halo>0)
+        {
+          if(tid<halo*2)
+          {
+            __pipeline_memcpy_async(sm_buffer+dst_ind-halo+tid+blockDim.x+sm_x_base, 
+                    src + (l_global_y) * global_x_size + east //MIN(-halo+tid+blockDim.x+global_x_base,global_x_size-1)
+                      , sizeof(REAL));
+          }
+        }
+        __pipeline_commit();
+      #endif
+    #endif
+  }
+  if(sync==true)
+  {  
+    #ifdef ASYNCSM
+      #if PERKS_ARCH>=800 
+        __pipeline_wait_prior(0);
+      #endif
+    #endif
+    __syncthreads();
+  }
+  
+  #undef dst_ind
+}
+
 
 __device__ void __forceinline__ pipesync()
 {
@@ -285,6 +359,46 @@ __device__ void __forceinline__ sm2regs(REAL* sm_src, REAL reg_dst[2*halo+1][REG
     }
   }
 }
+template<class REAL, int REG_SIZE, int SIZE, int halo>
+__device__ void __forceinline__ sm2regs_nomiddle(REAL* sm_src, REAL reg_dst[2*halo+1][REG_SIZE],
+                                      int y_base, 
+                                      int x_base, int x_id,
+                                      int sm_width, 
+                                      int reg_base=0)
+{
+  // if(x_id%32==0||x_id%32==31)
+  {
+    _Pragma("unroll")
+    for(int l_x=0; l_x<halo; l_x++)
+    {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<SIZE ; l_y++)
+      {
+        reg_dst[l_x][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+l_x-halo];//input[(global_y) * width_x + global_x];
+      }
+    }
+      // _Pragma("unroll")
+    // for(int l_x=0; l_x<halo*2+1; l_x++)
+    // {
+    //   _Pragma("unroll")
+    //   for(int l_y=0; l_y<SIZE ; l_y++)
+    //   {
+    //     reg_dst[halo][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+halo-halo];//input[(global_y) * width_x + global_x];
+    //   }
+    // }
+      _Pragma("unroll")
+    for(int l_x=halo+1; l_x<halo*2+1; l_x++)
+    {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<SIZE ; l_y++)
+      {
+        reg_dst[l_x][l_y+reg_base] = sm_src[(l_y+y_base)*sm_width+x_base+x_id+l_x-halo];//input[(global_y) * width_x + global_x];
+      }
+    }
+  }
+
+}
+
 
 
 template<class REAL, int REG_SIZE, int SIZE>

@@ -132,6 +132,7 @@ __device__ __forceinline__ void inner_general
     // sdfa
   }
   __syncthreads();
+ 
   for(int iter=0; iter<iteration; iter++)
   {
     int local_x=tid;
@@ -181,7 +182,7 @@ __device__ __forceinline__ void inner_general
         }
       }
     }
-
+    // #ifndef SMALL
     //south
     global2sm<REAL,halo,ISINITI,SYNC>(input, sm_rbuffer, 
                                             halo*2,
@@ -189,12 +190,33 @@ __device__ __forceinline__ void inner_general
                                             p_x, width_x,
                                             ps_y-halo, ps_x, tile_x_with_halo,
                                             tid);
-
-    SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+    if(UseRegCache)
+    {
+      // #ifndef BOX
+      sm2reg<REAL,sizeof_rspace, halo*2,isBOX>(sm_rbuffer, r_space, 
                                                     0,
                                                     ps_x, tid,
                                                     tile_x_with_halo);
+    
+      
+      #ifdef BOX
+        /* code */
+        SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+                                                    0,
+                                                    ps_x, tid,
+                                                    tile_x_with_halo);    
+      #endif
+    }
+    else
+    {
+          
+      SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+                                                    0,
+                                                    ps_x, tid,
+                                                    tile_x_with_halo);    
+    }
 
+    // #endif
     __syncthreads();
     //computation of register space
     if(UseRegCache)
@@ -215,28 +237,86 @@ __device__ __forceinline__ void inner_general
             sm_rbuffer[(l_y+ps_y)*tile_x_with_halo+(-halo) + ps_x + l_x]=boundary_buffer[w_step + l_y + local_y + l_x * boundary_line_size];
           }
         }
+        #ifndef BOX
         reg2sm<REAL, sizeof_rspace, LOCAL_TILE_Y>(r_space, sm_rbuffer, 
-                                  ps_y+halo, ps_x, tid, 
-                                  tile_x_with_halo, local_y+halo*2);
+                                  ps_y, ps_x, tid, 
+                                  tile_x_with_halo, local_y+halo);
+        
+        #else
+        // reg2sm<REAL, sizeof_rspace, LOCAL_TILE_Y>(r_space, sm_rbuffer, 
+        //                           ps_y+halo, ps_x, tid, 
+        //                           tile_x_with_halo, local_y+halo+halo);
+        reg2sm<REAL, sizeof_rspace, LOCAL_TILE_Y+2*halo>(r_space, sm_rbuffer, 
+                                  ps_y-halo, ps_x, tid, 
+                                  tile_x_with_halo, local_y);
+        #endif 
         __syncthreads();
-        SM2REG<REAL,sizeof_rbuffer, LOCAL_TILE_Y,isBOX>(sm_rbuffer, r_smbuffer, 
+        #ifdef BOX
+        sm2regs_nomiddle<REAL,sizeof_rbuffer, LOCAL_TILE_Y,isBOX>(sm_rbuffer, r_smbuffer, 
                                                     2*halo,
                                                     ps_x, tid,
                                                     tile_x_with_halo,
                                                     2*halo); 
+        // _Pragma("unroll")
+        // for(int i=0; i<LOCAL_TILE_Y+2*halo; i++)
+        // {
+        //   r_smbuffer[halo][i]=r_space[i+local_y];
+        // }
+        #endif
         REAL sum[LOCAL_TILE_Y];
         init_reg_array<REAL,LOCAL_TILE_Y>(sum,0); 
-        computation<REAL,LOCAL_TILE_Y,halo>(sum,
+        #ifdef BOX
+        computation<REAL,LOCAL_TILE_Y,halo,sizeof_rbuffer,sizeof_rspace>(sum,
                                       sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
-                                      r_smbuffer, halo,
+                                      r_smbuffer,
+                                      r_space, halo+local_y,
                                       stencilParaInput);
-        __syncthreads();
+        // computation<REAL,LOCAL_TILE_Y,halo>(sum,
+                                      // sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
+                                      // r_smbuffer, halo,
+                                      // stencilParaInput);
+        #else
+        computation<REAL,LOCAL_TILE_Y,halo,sizeof_rspace>(sum,
+                                      sm_rbuffer, ps_y, local_x+ps_x, tile_x_with_halo,
+                                      r_space, local_y+halo,
+                                      stencilParaInput);
+        #endif
+        // __syncthreads();
+        // _Pragma("unroll")
+        // for(int i=LOCAL_TILE_Y; i<LOCAL_TILE_Y+2*halo; i++)
+        // {
+        //   r_smbuffer[halo][i]=r_space[i+local_y];
+        // }
         reg2reg<REAL, LOCAL_TILE_Y, sizeof_rspace, LOCAL_TILE_Y>(sum,r_space, 0, local_y);
-        ptrselfcp<REAL,-halo, halo,halo>(sm_rbuffer, ps_y, LOCAL_TILE_Y, tid, tile_x_with_halo);
+        #ifdef BOX
+        // ptrselfcp<REAL,-halo, halo,halo>(sm_rbuffer, ps_y, LOCAL_TILE_Y, tid, tile_x_with_halo);
         REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
                 (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
+        #endif
         __syncthreads();
       }
+      // ptrselfcp<REAL,-halo, halo,halo>(sm_rbuffer, ps_y, LOCAL_TILE_Y, tid, tile_x_with_halo);
+      // __syncthreads();
+      // #ifndef BOX
+        reg2sm<REAL, sizeof_rspace, 2*halo>(r_space, sm_rbuffer, 
+                                    ps_y-halo, ps_x, tid, 
+                                    tile_x_with_halo, sizeof_rspace-halo*2);
+          
+        __syncthreads();
+      // #endif
+
+      #ifndef BOX
+      SM2REG<REAL,sizeof_rbuffer, halo*2,isBOX>(sm_rbuffer, r_smbuffer, 
+                                                    0,
+                                                    ps_x, tid,
+                                                    tile_x_with_halo);  
+      #else
+      _Pragma("unroll")
+      for(int i=0; i<2*halo; i++)
+      {
+        r_smbuffer[halo][i]=r_space[i+sizeof_rspace-2*halo];
+      }
+      #endif      
     }
     if(UseSMCache)
     //computation of share memory space
@@ -302,7 +382,7 @@ __device__ __forceinline__ void inner_general
                                             ps_y, ps_x, tile_x_with_halo,                                    
                                             tid);
     }
-
+#ifndef SMALL
     for(int global_y=p_y_cache_end; global_y<p_y_end; global_y+=LOCAL_TILE_Y)
     {
 
@@ -331,6 +411,7 @@ __device__ __forceinline__ void inner_general
       REG2REG<REAL, sizeof_rbuffer, sizeof_rbuffer, 2*halo,isBOX>
                 (r_smbuffer,r_smbuffer, LOCAL_TILE_Y, 0);
     }
+#endif
     if(iter==iteration-1)break;
     //register memory related boundary
     //south

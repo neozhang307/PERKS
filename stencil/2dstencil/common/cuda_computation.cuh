@@ -124,9 +124,59 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
   }
 #endif
 }
+//special for box version
+#ifdef BOX
+template<class REAL, int RESULT_SIZE, int halo, int INPUTREG_SIZE=(RESULT_SIZE+2*halo), int CACHESIZE>
+__device__ void __forceinline__ computation(REAL result[RESULT_SIZE], 
+                                            REAL* sm_ptr, int sm_y_base, int sm_x_ind,int sm_width, 
+                                            REAL R_PTR,
+                                            REAL r_space[CACHESIZE],
+                                            int reg_base, 
+                                            stencilParaList
+                                            // const REAL west[6],const REAL east[6], 
+                                            // const REAL north[6],const REAL south[6],
+                                            // const REAL center 
+                                          )
+{
 
-
-
+  _Pragma("unroll")\
+  for(int hl_y=-halo; hl_y<=halo; hl_y++)
+  {
+    _Pragma("unroll")
+    for(int hl_x=-halo; hl_x<0; hl_x++)
+    {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<RESULT_SIZE ; l_y++)
+      {
+        result[l_y]+=filter[hl_y+halo][hl_x+halo]*r_ptr[hl_x+halo][hl_y+halo+l_y];
+      }
+    }
+    // _Pragma("unroll")
+    // for(int hl_x=-halo; hl_x<=halo; hl_x++)
+    // {
+    //   _Pragma("unroll")
+    //   for(int l_y=0; l_y<RESULT_SIZE ; l_y++)
+    //   {
+    //     result[l_y]+=filter[hl_y+halo][0+halo]*r_ptr[0+halo][hl_y+halo+l_y];
+    //   }
+    // }
+    _Pragma("unroll")
+    for(int l_y=0; l_y<RESULT_SIZE ; l_y++)
+    {
+      result[l_y]+=filter[hl_y+halo][0+halo]*r_space[hl_y+reg_base+l_y];
+    }
+    _Pragma("unroll")
+    for(int hl_x=1; hl_x<=halo; hl_x++)
+    {
+      _Pragma("unroll")
+      for(int l_y=0; l_y<RESULT_SIZE ; l_y++)
+      {
+        result[l_y]+=filter[hl_y+halo][hl_x+halo]*r_ptr[hl_x+halo][hl_y+halo+l_y];
+      }
+    }
+  }
+}
+#endif
 template<class REAL, int halo>
 __global__ void
 kernel2d_restrict (REAL* input, int width_y, int width_x, REAL* output);
@@ -189,7 +239,7 @@ __global__ void kernel_persistent_baseline_async(REAL *__restrict__  input, int 
   REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
   int iteration);
 
-  template<class REAL, int LOCAL_TILE_Y, int halo>
+template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void kernel_persistent_baseline_box_async( REAL * __restrict__ input, int width_y, int width_x, 
   REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
   int iteration);
