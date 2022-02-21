@@ -42,9 +42,6 @@
   #define USEMAXSM
 #endif
 
-// #ifdef __PRINT__ 
-//   #define WARMUPRUN
-// #endif
 
 #ifndef RUNS
   #define RUNS (1)
@@ -72,289 +69,23 @@ void host_printptx(int&result)
   printptx<<<1,1>>>(d_r);
   cudaMemcpy(&result, d_r, sizeof(int), cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
+  cudaFree(d_r);
 }
 
 #ifndef RTILE_Y
 #define RTILE_Y (8)
 #endif
 
-#include "perksconfig.cuh"
-
-template<int halo, bool isstar, int registeramount, int arch, bool useSM, class REAL>
-int getMinWidthY(int width_x, int bdimx, int blkpsm)
-{
-  //firstly be able  to get the register info
-  int ptx;
-  host_printptx(ptx);
-
-  int smcount=0;
-  if(ptx==700)
-  {
-    smcount=80;
-  }
-  if(ptx==800)
-  {
-    smcount=108;
-  }
-  int registerfoler=0;
-  int max_sm_flder=0;
-  // int total_flder=0;
-  // int blkpsm=256/registeramount;
-  {
-    {
-      
-      if(useSM)
-      {
-        registerfoler=regfolder<halo,isstar,registeramount,arch,true,REAL>::val;
-
-        int maxSharedMemory;
-        cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
-        int SharedMemoryUsed = maxSharedMemory-1024;
-
-        int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
-        // printf("%d\n",SharedMemoryUsed/sizeof(REAL)/blkpsm);
-        // printf("%d\n",2*HALO*isBOX);
-        // printf("%d\n",basic_sm_space);
-        // printf("%d\n",2*HALO*(registerfoler)*RTILE_Y);
-        // printf("%d\n",2*HALO*(bdimx+2*HALO));
-        int tmp0=SharedMemoryUsed/sizeof(REAL)/blkpsm;
-        int tmp1=2*HALO*isBOX;
-        int tmp2=basic_sm_space;
-        int tmp3=2*HALO*(registerfoler)*RTILE_Y;
-        int tmp4=2*HALO*(bdimx+2*HALO);
-        tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
-        tmp0=tmp0>0?tmp0:0;
-        max_sm_flder=(tmp0)/(bdimx+4*HALO)/RTILE_Y;
-        // printf("%d,%d\n",registerfoler,max_sm_flder);
-      }
-      else
-      {
-        registerfoler=regfolder<halo,isstar,registeramount,arch,false,REAL>::val;
-      }
-    }
-  }
-  int dimy=smcount*blkpsm/(width_x/bdimx);
-  return (registerfoler+max_sm_flder)*RTILE_Y*dimy;
-}
-template<class REAL>
-int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm)
-{
-  int ptx;
-  host_printptx(ptx);
-
-#ifdef GEN
-  registers=0;
-#endif
-  if(blkpsm!=1||registers==0)
-  {
-#if defined(PERSISTENT)
-
-  #ifndef BOX
-  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
-  #else
-  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
-  #endif
-#endif
-#if defined(BASELINE_CM)||defined(BASELINE)
-  #ifndef BOX
-    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
-  #else
-    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
-  #endif
-#endif
-#ifdef NAIVE
-  #ifndef BOX
-    auto execute_kernel = kernel2d_restrict<REAL,HALO>;
-  #else
-    auto execute_kernel = kernel2d_restrict_box<REAL,HALO>;
-  #endif
-#endif 
-#ifdef GEN
-  #ifndef BOX
-    auto execute_kernel = 
-          (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-            kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
-  #else
-    auto execute_kernel = 
-          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-          ;
-  #endif
-#endif
-
-#ifdef GENWR
-  auto execute_kernel =
-   // noregcache?(
-                    // useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,0,true>:
-                    // kernel_general_wrapper<REAL,RTILE_Y,HALO,0,false>):
-                (blkpsm>=2?
-                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
-                    kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
-                :
-                (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
-                    kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
-                ; 
-  // auto execute_kernel=kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>;
-#endif
-    int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
-    size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
-    size_t executeSM = sharememory_basic;
-    int getblkpsm=100;
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &getblkpsm, execute_kernel, bdimx, executeSM);
-    if(blkpsm<=0)blkpsm=getblkpsm;
-    else blkpsm=min(blkpsm,getblkpsm);
-    // blkpsm=1;
-  }
-
-
-
-  // if(registers!=0)
-  // {
-  //   blkpsm=256/registers;
-  // }
-  if(ptx==800)
-  {
-    if(registers==0)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,0,800,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return 0;
-        // return getMinWidthY<HALO,isStar,0,800,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-    if(registers==128)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,128,800,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return getMinWidthY<HALO,isStar,128,800,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-    if(registers==256)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,256,800,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return getMinWidthY<HALO,isStar,256,800,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-  }
-
-  if(ptx==700)
-  {
-    if(registers==0)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,0,700,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return 0;
-        // return getMinWidthY<HALO,isStar,0,700,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-    if(registers==128)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,128,700,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return getMinWidthY<HALO,isStar,128,700,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-    if(registers==256)
-    {
-      if(useSM)
-      {
-        return getMinWidthY<HALO,isStar,256,700,true,REAL>(width_x,bdimx,blkpsm);
-      }
-      else
-      {
-        return getMinWidthY<HALO,isStar,256,700,false,REAL>(width_x,bdimx,blkpsm);
-      }
-    }
-  }
-  return 0;
-}
-
-
-template<int halo, bool isstar, int arch, class REAL>
-int getMinWidthY(int width_x, int bdimx)
-{
-  int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL>(width_x,bdimx,2);
-  int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL>(width_x,bdimx,1);
-  int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL>(width_x,bdimx,2);
-  int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL>(width_x,bdimx,1);
-
-  int result = max(minwidthy1,minwidthy2);
-  // printf("%d,%d,%d,%d\n",minwidthy1,minwidthy2,minwidthy3,minwidthy4);
-  result = max(result,minwidthy3);
-  result = max(result,minwidthy4);
-  return result;
-}
-
-template<class REAL>
-int getMinWidthY(int width_x, int bdimx, int ptx)
-{
-  // int ptx;
-  // host_printptx(ptx);
-  if(ptx==800)
-  {
-    return getMinWidthY<HALO,isStar,800, REAL>(width_x,bdimx);
-  }
-  if(ptx==700)
-  {
-    return getMinWidthY<HALO,isStar,700, REAL>(width_x,bdimx);
-  }  
-  return 0;
-}
-
-template<class REAL>
-int getMinWidthY(int width_x, int bdimx)
-{
-  int ptx;
-  host_printptx(ptx);
-  if(ptx==800)
-  {
-    return getMinWidthY<HALO,isStar,800, REAL>(width_x,bdimx);
-  }
-  if(ptx==700)
-  {
-    return getMinWidthY<HALO,isStar,700, REAL>(width_x,bdimx);
-  }  
-  return 0;
-}
-
-template int getMinWidthY<float>  (int, int, int, bool,int);
-template int getMinWidthY<double> (int, int, int, bool,int);
-template int getMinWidthY<float>  (int, int);
-template int getMinWidthY<double> (int, int);
-
-
-// #ifdef GENWR
-// #define REG_FOLDER_Y (regfolder<HALO,isBOX==0,blkpsm>=2?128:256,ptx,useSM,REAL>::val);
-// #endif
-
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
-int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int bdimx, int blkpsm, int iteration, bool async, bool useSM, bool usewarmup, int warmupiteration){
+int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, 
+  int bdimx, int blkpsm, int iteration, bool async, bool useSM, 
+  bool usewarmup, int warmupiteration,
+  bool isDoubleTile){
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
-
+ // #define LOCAL_RTILE_Y (RTILE_Y)
+  const int LOCAL_RTILE_Y = isDoubleTile?RTILE_Y*2:RTILE_Y;
   int ptx;
   host_printptx(ptx);
   
@@ -364,26 +95,26 @@ if(blkpsm>=2)
 {
   if(useSM)
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,128,800,true,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,128,700,true,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,128,800,true,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,128,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,128,700,true,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,128,700,true,REAL>::val);
   }
   else
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,128,800,false,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,128,700,false,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,128,800,false,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,128,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,128,700,false,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,128,700,false,REAL>::val);
   }
 }
 else
 {
   if(useSM)
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,256,800,true,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,256,700,true,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,256,800,true,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,256,800,true,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,256,700,true,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,256,700,true,REAL>::val);
   }
   else
   {
-    if(ptx==800)REG_FOLDER_Y=(regfolder<HALO,isStar,256,800,false,REAL>::val);
-    if(ptx==700)REG_FOLDER_Y=(regfolder<HALO,isStar,256,700,false,REAL>::val);
+    if(ptx==800)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,256,800,false,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,256,800,false,REAL>::val);
+    if(ptx==700)REG_FOLDER_Y=isDoubleTile?(regfolder<HALO,isStar,256,700,false,REAL,2*RTILE_Y>::val):(regfolder<HALO,isStar,256,700,false,REAL>::val);
   }
 }
 
@@ -404,20 +135,24 @@ else
 #if defined(PERSISTENT)
 
   #ifndef BOX
-  // auto execute_kernel = async?kernel_persistent_baseline_async<REAL,RTILE_Y,HALO>: kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
-  auto execute_kernel = kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+  // auto execute_kernel = async?kernel_persistent_baseline_async<REAL,LOCAL_RTILE_Y,HALO>: kernel_persistent_baseline<REAL,LOCAL_RTILE_Y,HALO>;
+  auto execute_kernel = isDoubleTile? kernel_persistent_baseline<REAL,2*RTILE_Y,HALO>
+                                :kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
   #else
-  // auto execute_kernel = async?kernel_persistent_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
-  auto execute_kernel = kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+  // auto execute_kernel = async?kernel_persistent_baseline_box_async<REAL,LOCAL_RTILE_Y,HALO>:kernel_persistent_baseline_box<REAL,LOCAL_RTILE_Y,HALO>;
+  auto execute_kernel = isDoubleTile? kernel_persistent_baseline_box<REAL,RTILE_Y*2,HALO>
+                                : kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #if defined(BASELINE_CM)||defined(BASELINE)
   #ifndef BOX
-    // auto execute_kernel = async?kernel_baseline_async<REAL,RTILE_Y,HALO>:kernel_baseline<REAL,RTILE_Y,HALO>;
-    auto execute_kernel = kernel_baseline<REAL,RTILE_Y,HALO>;
+    // auto execute_kernel = async?kernel_baseline_async<REAL,LOCAL_RTILE_Y,HALO>:kernel_baseline<REAL,LOCAL_RTILE_Y,HALO>;
+    auto execute_kernel = isDoubleTile?kernel_baseline<REAL,2*RTILE_Y,HALO>
+                                : kernel_baseline<REAL,RTILE_Y,HALO>;
   #else
-    // auto execute_kernel = async?kernel_baseline_box_async<REAL,RTILE_Y,HALO>:kernel_baseline_box<REAL,RTILE_Y,HALO>;
-    auto execute_kernel = kernel_baseline_box<REAL,RTILE_Y,HALO>;
+    // auto execute_kernel = async?kernel_baseline_box_async<REAL,LOCAL_RTILE_Y,HALO>:kernel_baseline_box<REAL,LOCAL_RTILE_Y,HALO>;
+    auto execute_kernel = isDoubleTile? kernel_baseline_box<REAL,2*RTILE_Y,HALO>
+                                :kernel_baseline_box<REAL,RTILE_Y,HALO>;
   #endif
 #endif
 #ifdef NAIVE
@@ -429,45 +164,41 @@ else
 #endif 
 #ifdef GEN
   #ifndef BOX
-    // auto execute_kernel = async?
-    //       (useSM?kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-    //       kernel_general_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-    //       :
-    //       (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-    //         kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
-    auto execute_kernel = (useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+
+    auto execute_kernel = isDoubleTile? 
+            (useSM?kernel_general<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+            kernel_general<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+            :(useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
             kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
   #else
-    // auto execute_kernel = async?
-    //       (useSM?kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-    //         kernel_general_box_async<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-    //         :
-    //       (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-    //         kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
-    //       ;
-    auto execute_kernel = 
-          (useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
-            kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+
+    auto execute_kernel = isDoubleTile?
+            (useSM?kernel_general_box<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+              kernel_general_box<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+            :(useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+              kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
           ;
   #endif
 #endif
 
 #ifdef GENWR
-  auto execute_kernel =
-   // noregcache?(
-                    // useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,0,true>:
-                    // kernel_general_wrapper<REAL,RTILE_Y,HALO,0,false>):
+  auto execute_kernel = isDoubleTile?
                 (blkpsm>=2?
+                (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,true>:
+                    kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,false>)
+                :
+                (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,true>:
+                    kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,false>))
+                :(blkpsm>=2?
                 (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
                     kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
                 :
                 (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
                     kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
                 ; 
-  // auto execute_kernel=kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>;
 #endif
 
-  //auto execute_kernel = kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
+  //auto execute_kernel = kernel_general<REAL,LOCAL_RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
 
   int sm_count;
   cudaDeviceGetAttribute ( &sm_count, cudaDevAttrMultiProcessorCount,0 );
@@ -509,13 +240,13 @@ else
 size_t executeSM = 0;
 #ifndef NAIVE
   //shared memory used for compuation
-  int basic_sm_space=(RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+  int basic_sm_space=(LOCAL_RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
   size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
   executeSM = sharememory_basic;
   {
     #if defined(GEN) || defined(GENWR)  
     #define halo HALO
-    executeSM +=  (HALO*2*(( REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+    executeSM +=  (HALO*2*(( REG_FOLDER_Y)*LOCAL_RTILE_Y+isBOX))*sizeof(REAL);
     #undef halo
     #endif
   }
@@ -564,17 +295,17 @@ size_t executeSM = 0;
   int tmp0=SharedMemoryUsed/sizeof(REAL)/numBlocksPerSm_current;
   int tmp1=2*HALO*isBOX;
   int tmp2=basic_sm_space;
-  int tmp3=2*HALO*(REG_FOLDER_Y)*RTILE_Y;
+  int tmp3=2*HALO*(REG_FOLDER_Y)*LOCAL_RTILE_Y;
   int tmp4=2*HALO*(bdimx+2*HALO);
   tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
   tmp0=tmp0>0?tmp0:0;
-  max_sm_flder=(tmp0)/(bdimx+4*HALO)/RTILE_Y;
+  max_sm_flder=(tmp0)/(bdimx+4*HALO)/LOCAL_RTILE_Y;
   // printf("smflder is %d\n",max_sm_flder);
   if(!useSM)max_sm_flder=0;
   if(useSM&&max_sm_flder==0)return 1;
 
-  size_t sm_cache_size =max_sm_flder==0?0: (max_sm_flder*RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
-  size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*RTILE_Y+isBOX))*sizeof(REAL);
+  size_t sm_cache_size =max_sm_flder==0?0: (max_sm_flder*LOCAL_RTILE_Y+2*HALO)*(bdimx+2*HALO)*sizeof(REAL);
+  size_t y_axle_halo = (HALO*2*((max_sm_flder + REG_FOLDER_Y)*LOCAL_RTILE_Y+isBOX))*sizeof(REAL);
   executeSM=sharememory_basic+y_axle_halo;
   executeSM+=sm_cache_size;
 
@@ -596,7 +327,7 @@ size_t executeSM = 0;
 #endif
 #ifdef BASELINE
   dim3 block_dim2(bdimx);
-  dim3 grid_dim2(width_x/bdimx,MIN((sm_count*8*1024/bdimx)/(width_x/bdimx),width_y/RTILE_Y));
+  dim3 grid_dim2(width_x/bdimx,MIN((sm_count*8*1024/bdimx)/(width_x/bdimx),width_y/LOCAL_RTILE_Y));
 //  printf("<%d,%d,%d>",); 
   dim3 executeBlockDim=block_dim2;
   dim3 executeGridDim=grid_dim2;
@@ -785,7 +516,7 @@ if(usewarmup){
   #ifdef __PRINT__
     printf("%f\t%f\t",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ (elapsedTime/RUNS)/1000/1000);
     #if defined(GEN) || defined(GENWR)
-    printf("%d\t%d\t%d\t%d",REG_FOLDER_Y,max_sm_flder,(int)bdimx*grid_dim.x,(int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
+    printf("%d\t%d\t%d\t%d",REG_FOLDER_Y,max_sm_flder,(int)bdimx*grid_dim.x,(int)(max_sm_flder+REG_FOLDER_Y)*LOCAL_RTILE_Y*grid_dim.y);
     #endif
     printf("\n");
   #else
@@ -796,8 +527,8 @@ if(usewarmup){
     printf("[FORMA] width_x:width_y=%d:%d\n",(int)width_x, (int)width_y);
     printf("[FORMA] gdimx:gdimy=%d:%d\n",(int)executeGridDim.x, (int)executeGridDim.y);
     #if defined(GEN) || defined(GENWR)
-      printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)bdimx*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*RTILE_Y*grid_dim.y);
-      printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
+      printf("[FORMA] cached width_x:width_y=%d:%d\n",(int)bdimx*grid_dim.x, (int)(max_sm_flder+REG_FOLDER_Y)*LOCAL_RTILE_Y*grid_dim.y);
+      printf("[FORMA] cached b:sf:rf=%d:%d:%d\n", (int)LOCAL_RTILE_Y, (int)max_sm_flder, (int)REG_FOLDER_Y);
     #endif
   #endif
 
@@ -832,6 +563,7 @@ if(usewarmup){
   cudaFree(L2_cache3);
 #endif
   return 0;
+  #undef LOCAL_RTILE_Y
 }
 
 PERKS_INITIALIZE_ALL_TYPE(PERKS_DECLARE_INITIONIZATION_ITERATIVE);

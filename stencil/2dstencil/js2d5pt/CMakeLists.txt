@@ -110,41 +110,48 @@ endfunction()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 # include_directories("/usr/local/cuda/include")
 
+
+
 mylib("${type}_naive" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" "${DEFAULT_COMPILER_FLAG}")
 set_target_properties("${type}_naive" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
 mylib("${type}_naive_nvcc" "${CMAKE_SOURCE_DIR}/jacobi-naive.cu" "${DEFAULT_COMPILER_FLAG} -DNAIVENVCC")
 set_target_properties("${type}_naive_nvcc" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
-
 mylib("${type}_baseline" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ")
 set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
-mylib("${type}_baseline_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}  -DSMASYNC")
-set_target_properties("${type}_baseline_async" PROPERTIES CUDA_ARCHITECTURES "80")
+# # mylib("${type}_baseline_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}  -DSMASYNC")
+# # set_target_properties("${type}_baseline_async" PROPERTIES CUDA_ARCHITECTURES "80")
 
-# mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT")
-# set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# mylib("${type}_persistent_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT -DSMASYNC")
-# set_target_properties("${type}_persistent_async" PROPERTIES CUDA_ARCHITECTURES "70;80")
+mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT")
+set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
+# # mylib("${type}_persistent_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT -DSMASYNC")
+# # set_target_properties("${type}_persistent_async" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
-# mylib("${type}_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DGEN ")
-# set_target_properties("${type}_gen" PROPERTIES CUDA_ARCHITECTURES "70;80")
+mylib("${type}_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DGEN ")
+set_target_properties("${type}_gen" PROPERTIES CUDA_ARCHITECTURES "70;80")
+
 # mylib("${type}_gen_async" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DGEN -DSMASYNC")
 # set_target_properties("${type}_gen_async" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
 
-# mylib("${type}_genwr" "${CMAKE_SOURCE_DIR}/jacobi-general-wrapper.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} ")
-# set_target_properties("${type}_genwr" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# mylib("${type}_gen_async" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DGEN -DSMASYNC")
-# set_target_properties("${type}_gen_async" PROPERTIES CUDA_ARCHITECTURES "70;80")
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVENVCC" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive_nvcc" )
+mylib("${type}_genwr" "${CMAKE_SOURCE_DIR}/jacobi-general-wrapper.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} ")
+set_target_properties("${type}_genwr" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" "${type}_baseline_async")
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" "${type}_baseline_async")
-# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" "${type}_persistent_async")
-# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" "${type}_gen_async")
-# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr")
+# mylib("${type}_genwr_small" "${CMAKE_SOURCE_DIR}/jacobi-general-wrapper.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DSMALL ")
+# set_target_properties("${type}_genwr_small" PROPERTIES CUDA_ARCHITECTURES "70;80")
+
+
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVENVCC" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive_nvcc" )
+
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr")
+
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWRSMALL" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr_small")
 
 
 # set_target_properties($${type}_persistent_async PROPERTIES CUDA_SEPARABLE_COMPILATION ON)

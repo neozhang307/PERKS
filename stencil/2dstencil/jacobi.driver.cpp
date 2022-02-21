@@ -50,6 +50,7 @@ int main(int argc, char  *argv[])
   bool usewarmup=false;
   bool checkmindomain=false;
   bool usesmall=false;
+  bool isDoubleTile=false;
 
   if (argc >= 3) {
     width_y = atoi(argv[1]);
@@ -66,6 +67,7 @@ int main(int argc, char  *argv[])
   useSM = args.CheckCmdLineFlag("usesm");
   usewarmup = args.CheckCmdLineFlag("warmup");
   usesmall = args.CheckCmdLineFlag("small");
+  isDoubleTile = args.CheckCmdLineFlag("doubletile");
   // bdimx = args
   args.GetCmdLineArgument("bdim", bdimx);
   args.GetCmdLineArgument("iter", iteration);
@@ -84,17 +86,15 @@ int main(int argc, char  *argv[])
     int registers=256;
     if(blkpsm>=2)
       registers=128;
-    // if(blkpsm==1)
     else
       registers=256;
-    // printf("hrere");
     if(fp32)
     {
-      width_y=getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm);
+      width_y=getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm,isDoubleTile);
     }
     else 
     {
-      width_y=getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm);
+      width_y=getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm,isDoubleTile);
     }
     if(width_y==0)
     {
@@ -111,18 +111,18 @@ int main(int argc, char  *argv[])
   {
     if(fp32)
     {
-      printf("2048 %d\n",getMinWidthY<float>(2048,bdimx));
+      printf("%d %d\n",width_x,getMinWidthY<float>(width_x,bdimx,isDoubleTile));
     }
     else
     {
-      printf("2048 %d\n",getMinWidthY<double>(2048,bdimx));
+      printf("%d %d\n",width_x,getMinWidthY<double>(width_x,bdimx,isDoubleTile));
     }
     return 0;
   }
 
 
 #ifndef __PRINT__
-  {
+{
   int registers=256;
   if(blkpsm==2)registers=128;
   if(blkpsm==1)registers=256;
@@ -132,11 +132,11 @@ int main(int argc, char  *argv[])
   // #endif
   if(fp32)
   {
-    printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm));
+    printf("%d %d\n", width_x,getMinWidthY<float>(width_x,bdimx,registers,useSM,blkpsm,isDoubleTile));
   }
   else
   {
-    printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm));
+    printf("%d %d\n", width_x,getMinWidthY<double>(width_x,bdimx,registers,useSM,blkpsm,isDoubleTile));
   }
 }
 #endif
@@ -158,7 +158,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM,usewarmup, warmupiteration);
+      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output,bdimx,blkpsm,iteration,async,useSM,usewarmup, warmupiteration,isDoubleTile);
       if(err==1)
       {
         if(check)printf("unsupport setting, no free space for cache with shared memory\n");
@@ -198,7 +198,7 @@ int main(int argc, char  *argv[])
       jacobi_gold((REAL*)input, width_y, width_x, (REAL*)output);
       jacobi_gold_iterative((REAL*)input, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM,usewarmup, warmupiteration);
+      int err = jacobi_iterative((REAL*)input, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, async, useSM,usewarmup, warmupiteration,isDoubleTile);
       if(err==1)
       {
         if(check)printf("unsupport setting, no free space for cache with shared memory\n");
