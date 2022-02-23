@@ -4,9 +4,9 @@
 
 //this is where the aimed implementation located
 template<class REAL>
-void j3d_iterative(REAL*, int, int, int, REAL*, int);
+int j3d_iterative(REAL*, int, int, int, REAL*, int, int, int, bool, bool, int);
 
 #define PERKS_DECLARE_INITIONIZATION_ITERATIVE(_type) \
-    void j3d_iterative(_type*,int,int, int,_type*, int);
+    int j3d_iterative(_type*,int,int, int,_type*, int, int, int, bool, bool, int);
 
 #endif

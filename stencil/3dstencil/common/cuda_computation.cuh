@@ -15,14 +15,14 @@
 
 
 
-#define bdimx (128)
+#define bdimx (256)
 // #define bdimx (128)
 
 // #define ITEM_PER_THREAD (8) 
 #define ITEM_PER_THREAD (8) 
 // (TILE_Y/(bdimx/TILE_X))
 
-#define TILE_X (32)
+#define TILE_X (64)
 #define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
 
 // #define NOCACHE_Y (HALO)
