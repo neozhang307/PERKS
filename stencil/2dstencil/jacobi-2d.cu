@@ -76,6 +76,294 @@ void host_printptx(int&result)
 #define RTILE_Y (8)
 #endif
 
+template<int halo, bool isstar, int registeramount, int arch, bool useSM, class REAL, int LOCAL_RTILE_Y=RTILE_Y>
+int getMinWidthY(int width_x, int bdimx, int blkpsm)
+{
+  //firstly be able  to get the register info
+  int ptx;
+  host_printptx(ptx);
+
+  int smcount=0;
+  if(ptx==700)
+  {
+    smcount=80;
+  }
+  if(ptx==800)
+  {
+    smcount=108;
+  }
+  int registerfoler=0;
+  int max_sm_flder=0;
+  // int total_flder=0;
+  // int blkpsm=256/registeramount;
+  {
+    {
+      
+      if(useSM)
+      {
+        registerfoler=regfolder<halo,isstar,registeramount,arch,true,REAL,LOCAL_RTILE_Y>::val;
+
+        int maxSharedMemory;
+        cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
+        int SharedMemoryUsed = maxSharedMemory-1024;
+
+        int basic_sm_space=(LOCAL_RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+        // printf("%d\n",SharedMemoryUsed/sizeof(REAL)/blkpsm);
+        // printf("%d\n",2*HALO*isBOX);
+        // printf("%d\n",basic_sm_space);
+        // printf("%d\n",2*HALO*(registerfoler)*LOCAL_RTILE_Y);
+        // printf("%d\n",2*HALO*(bdimx+2*HALO));
+        int tmp0=SharedMemoryUsed/sizeof(REAL)/blkpsm;
+        int tmp1=2*HALO*isBOX;
+        int tmp2=basic_sm_space;
+        int tmp3=2*HALO*(registerfoler)*LOCAL_RTILE_Y;
+        int tmp4=2*HALO*(bdimx+2*HALO);
+        tmp0=tmp0-tmp1-tmp2-tmp3-tmp4;
+        tmp0=tmp0>0?tmp0:0;
+        max_sm_flder=(tmp0)/(bdimx+4*HALO)/LOCAL_RTILE_Y;
+        // printf("%d,%d\n",registerfoler,max_sm_flder);
+      }
+      else
+      {
+        registerfoler=regfolder<halo,isstar,registeramount,arch,false,REAL,LOCAL_RTILE_Y>::val;
+      }
+    }
+  }
+  int dimy=smcount*blkpsm/(width_x/bdimx);
+  // printf("<%d,%d>\n",registerfoler,dimy);
+  return (registerfoler+max_sm_flder)*LOCAL_RTILE_Y*dimy;
+}
+template<class REAL>
+int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm, bool isDoubleTile)
+{
+  const int  LOCAL_RTILE_Y=isDoubleTile?RTILE_Y*2: RTILE_Y;
+
+  int ptx;
+  host_printptx(ptx);
+
+#ifdef GEN
+  registers=0;
+#endif
+  if(blkpsm!=1||registers==0)
+  {
+    #if defined(PERSISTENT)
+
+      #ifndef BOX
+      auto execute_kernel = isDoubleTile?kernel_persistent_baseline<REAL,RTILE_Y*2,HALO>
+                  :kernel_persistent_baseline<REAL,RTILE_Y,HALO>;
+      #else
+      auto execute_kernel = isDoubleTile?kernel_persistent_baseline_box<REAL,RTILE_Y*2,HALO>
+                  :kernel_persistent_baseline_box<REAL,RTILE_Y,HALO>;
+      #endif
+      return 0;
+    #endif
+    #if defined(BASELINE_CM)||defined(BASELINE)
+      #ifndef BOX
+        auto execute_kernel = isDoubleTile?kernel_baseline<REAL,RTILE_Y*2,HALO>
+                  :kernel_baseline<REAL,RTILE_Y,HALO>;
+      #else
+        auto execute_kernel = isDoubleTile?kernel_baseline_box<REAL,RTILE_Y*2,HALO>
+                  :kernel_baseline_box<REAL,RTILE_Y,HALO>;
+      #endif
+      return 0;
+    #endif
+    #if defined(NAIVE)||defined(NAIVENVCC)
+      #ifndef BOX
+        auto execute_kernel = kernel2d_restrict<REAL,HALO>;
+      #else
+        auto execute_kernel = kernel2d_restrict_box<REAL,HALO>;
+      #endif
+      return 0;
+    #endif 
+    #ifdef GEN
+      #ifndef BOX
+        auto execute_kernel = isDoubleTile?
+              (useSM?kernel_general<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+                kernel_general<REAL,2*RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+              :(useSM?kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+                kernel_general<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>);
+      #else
+        auto execute_kernel = isDoubleTile?
+              (useSM?kernel_general_box<REAL,RTILE_Y*2,HALO,REG_FOLDER_Y,1,true>:
+                kernel_general_box<REAL,RTILE_Y*2,HALO,REG_FOLDER_Y,1,false>)
+              :(useSM?kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,true>:
+                kernel_general_box<REAL,RTILE_Y,HALO,REG_FOLDER_Y,1,false>)
+              ;
+      #endif
+    #endif
+
+    #ifdef GENWR
+      auto execute_kernel = isDoubleTile?
+                    (blkpsm>=2?
+                    (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,true>:
+                        kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,false>)
+                    :
+                    (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,true>:
+                        kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,false>))
+                    :(blkpsm>=2?
+                    (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
+                        kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
+                    :
+                    (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
+                        kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
+                    ; 
+
+      // auto execute_kernel = kernel_general_wrapper<float,RTILE_Y,HALO,256,true>;
+    #endif
+    int basic_sm_space=(LOCAL_RTILE_Y+2*HALO)*(bdimx+2*HALO)+1;
+    size_t sharememory_basic=(basic_sm_space)*sizeof(REAL);
+    size_t executeSM = sharememory_basic;
+    int getblkpsm=100;
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &getblkpsm, execute_kernel, bdimx, executeSM);
+    if(blkpsm<=0)blkpsm=getblkpsm;
+    else blkpsm=min(blkpsm,getblkpsm);
+    // blkpsm=1;
+  }
+
+  if(ptx==800)
+  {
+    if(registers==0)
+    {
+      if(useSM)
+      {
+        return isDoubleTile?getMinWidthY<HALO,isStar,0,800,true,REAL,RTILE_Y*2>(width_x,bdimx,blkpsm)
+         :getMinWidthY<HALO,isStar,0,800,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return 0;
+        // return getMinWidthY<HALO,isStar,0,800,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
+    if(registers==128)
+    {
+      if(useSM)
+      {
+        return isDoubleTile?getMinWidthY<HALO,isStar,128,800,true,REAL,RTILE_Y*2>(width_x,bdimx,blkpsm)
+                    :getMinWidthY<HALO,isStar,128,800,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return isDoubleTile?getMinWidthY<HALO,isStar,128,800,false,REAL,RTILE_Y*2>(width_x,bdimx,blkpsm):
+        getMinWidthY<HALO,isStar,128,800,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
+    if(registers==256)
+    {
+      if(useSM)
+      {
+        return isDoubleTile? getMinWidthY<HALO,isStar,256,800,true,REAL,RTILE_Y*2>(width_x,bdimx,blkpsm)
+        :getMinWidthY<HALO,isStar,256,800,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return isDoubleTile? getMinWidthY<HALO,isStar,256,800,false,REAL,RTILE_Y*2>(width_x,bdimx,blkpsm)
+        :getMinWidthY<HALO,isStar,256,800,false,REAL>(width_x,bdimx,blkpsm);;
+      }
+    }
+  }
+
+  if(ptx==700)
+  {
+    if(registers==0)
+    {
+      if(useSM)
+      {
+        return isDoubleTile?getMinWidthY<HALO,isStar,0,700,true,REAL,2*RTILE_Y>(width_x,bdimx,blkpsm)
+        : getMinWidthY<HALO,isStar,0,700,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return 0;
+        // return getMinWidthY<HALO,isStar,0,700,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
+    if(registers==128)
+    {
+      if(useSM)
+      {
+        return isDoubleTile? getMinWidthY<HALO,isStar,128,700,true,REAL,2*RTILE_Y>(width_x,bdimx,blkpsm)
+          :getMinWidthY<HALO,isStar,128,700,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return isDoubleTile?getMinWidthY<HALO,isStar,128,700,false,REAL,2*RTILE_Y>(width_x,bdimx,blkpsm)
+            : getMinWidthY<HALO,isStar,128,700,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
+    if(registers==256)
+    {
+      if(useSM)
+      {
+        return isDoubleTile? getMinWidthY<HALO,isStar,256,700,true,REAL,2*RTILE_Y>(width_x,bdimx,blkpsm)
+          :getMinWidthY<HALO,isStar,256,700,true,REAL>(width_x,bdimx,blkpsm);
+      }
+      else
+      {
+        return isDoubleTile? getMinWidthY<HALO,isStar,256,700,false,REAL,2*RTILE_Y>(width_x,bdimx,blkpsm)
+          :getMinWidthY<HALO,isStar,256,700,false,REAL>(width_x,bdimx,blkpsm);
+      }
+    }
+  }
+  return 0;
+}
+
+
+template<int halo, bool isstar, int arch, class REAL>
+int getMinWidthY(int width_x, int bdimx, bool isDoubleTile)
+{
+  if(isDoubleTile)
+  {
+    int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL,RTILE_Y*2>(width_x,bdimx,2);
+    int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL,RTILE_Y*2>(width_x,bdimx,1);
+    int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL,RTILE_Y*2>(width_x,bdimx,2);
+    int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL,RTILE_Y*2>(width_x,bdimx,1);
+
+    int result = max(minwidthy1,minwidthy2);
+    result = max(result,minwidthy3);
+    result = max(result,minwidthy4);
+    return result;
+  }
+  else
+  {
+    int minwidthy1 = getMinWidthY<halo,isstar,128,arch,false,REAL>(width_x,bdimx,2);
+    int minwidthy2 = getMinWidthY<halo,isstar,256,arch,false,REAL>(width_x,bdimx,1);
+    int minwidthy3 = getMinWidthY<halo,isstar,128,arch,true,REAL>(width_x,bdimx,2);
+    int minwidthy4 = getMinWidthY<halo,isstar,256,arch,true,REAL>(width_x,bdimx,1);
+
+    int result = max(minwidthy1,minwidthy2);
+    result = max(result,minwidthy3);
+    result = max(result,minwidthy4);
+    return result;
+  }
+
+}
+
+template<class REAL>
+int getMinWidthY(int width_x, int bdimx,bool isDoubleTile)
+{
+  int ptx;
+  host_printptx(ptx);
+  if(ptx==800)
+  {
+    return getMinWidthY<HALO,isStar,800, REAL>(width_x,bdimx,isDoubleTile);
+  }
+  if(ptx==700)
+  {
+    return getMinWidthY<HALO,isStar,700, REAL>(width_x,bdimx,isDoubleTile);
+  }  
+  return 0;
+}
+
+template int getMinWidthY<float>  (int, int, int, bool,int, bool);
+template int getMinWidthY<double> (int, int, int, bool,int, bool);
+template int getMinWidthY<float>  (int, int,bool);
+template int getMinWidthY<double> (int, int,bool);
+
+
+
+
 template<class REAL>
 // void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration, bool async=false){
 int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, 
@@ -85,7 +373,9 @@ int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__,
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
  // #define LOCAL_RTILE_Y (RTILE_Y)
+#ifndef NAIVE
   const int LOCAL_RTILE_Y = isDoubleTile?RTILE_Y*2:RTILE_Y;
+#endif
   int ptx;
   host_printptx(ptx);
   
@@ -196,6 +486,8 @@ else
                 (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,256,true>:
                     kernel_general_wrapper<REAL,RTILE_Y,HALO,256,false>))
                 ; 
+          // auto execute_kernel = kernel_general_wrapper<float,RTILE_Y,HALO,256,true>;
+
 #endif
 
   //auto execute_kernel = kernel_general<REAL,LOCAL_RTILE_Y,HALO,REG_FOLDER_Y,UseSMCache>;
