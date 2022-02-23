@@ -50,9 +50,9 @@ PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_GENERAL_WRAPPER,16,H
 // #error "wrong architecture"
 // #endif
 // template<> 
-// __global__ void kernel_general_wrapper<float,RTILE_Y,HALO,256,true,800,true,1>
+// __global__ void kernel_general_wrapper<float,RTILE_Y,HALO,256,true>
 // ( float * __restrict__ input, int width_y, int width_x, 
 //   float * __restrict__ __var_4__, 
 //   float * __restrict__ l2_cache_o,float * __restrict__ l2_cache_i,
 //   int iteration,
-  // int max_sm_flder);
+//   int max_sm_flder);

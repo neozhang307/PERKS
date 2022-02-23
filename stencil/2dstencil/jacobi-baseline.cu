@@ -99,7 +99,7 @@ __global__ void
   const int p_y =  blockIdx.y * (blocksize_y) + (blockIdx.y<=y_quotient?blockIdx.y:y_quotient);
   blocksize_y += (blockIdx.y<y_quotient?1:0);
   const int p_y_end = p_y + (blocksize_y);
-  const int sizeof_rbuffer=2*halo+RTILE_Y; 
+  const int sizeof_rbuffer=2*halo+LOCAL_TILE_Y; 
   // for(int iter=0; iter<iteration; iter++)
 #ifdef PERSISTENT  
   cg::grid_group gg = cg::this_grid();
