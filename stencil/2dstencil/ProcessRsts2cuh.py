@@ -31,7 +31,7 @@ def parsedata(shape,arch,register):
 				row[1]["tile"]
 				))
 		print("{")
-		print("\tstatic int const val = {};".format(row[1][4]))
+		print("\tstatic int const val = {};".format(row[1]["regfd"]))
 		print("};")
 
 
