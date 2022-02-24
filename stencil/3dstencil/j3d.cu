@@ -93,8 +93,8 @@ int j3d_iterative(REAL * h_input,
   auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef GEN
-  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true>
-                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,false>;
+  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,1,true>
+                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,1,false>;
 #endif
 
 //shared memory related 

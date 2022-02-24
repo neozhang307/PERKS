@@ -299,12 +299,12 @@ __global__ void kernel3d_persistent(REAL* __restrict__ input, REAL*__restrict__ 
 
 
 
-template<class REAL, int halo, int ipt, int tilex, int tiley, int reg_folder_z=0, bool UseSMCache=false>
+template<class REAL, int halo, int ipt, int tilex, int tiley, int reg_folder_z=0,int minblocks =1,  bool UseSMCache=false>
 __global__ void kernel3d_general(REAL* __restrict__ input, REAL*__restrict__ output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration, int max_sm_flder=0); 
-#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,tiley,regf,usesm) \
+#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,tiley,regf,minblocks, usesm) \
     __global__ void kernel3d_general<_type,halo,ipt,tilex,tiley,regf,usesm>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
 
 

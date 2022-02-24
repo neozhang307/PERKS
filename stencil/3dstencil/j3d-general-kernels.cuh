@@ -1,5 +1,8 @@
 // #include "./config.cuh"
-#include "./genconfig.cuh"
+#ifndef CONFIGURE
+  // #include "./config.cuh"
+  #include "./genconfig.cuh"
+#endif
 #include "./common/cuda_computation.cuh"
 #include "./common/cuda_common.cuh"
 #include "./common/types.hpp"
