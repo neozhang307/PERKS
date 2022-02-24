@@ -93,7 +93,8 @@ int j3d_iterative(REAL * h_input,
   auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
 #endif
 #ifdef GEN
-  auto execute_kernel = kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true>;
+  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true>
+                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,false>;
 #endif
 
 //shared memory related 
@@ -162,27 +163,20 @@ size_t executeSM=0;
 #ifdef PERSISTENTLAUNCH
   int max_sm_flder=0;
 #endif
-#if defined(GEN)
 
-  
-  int reg_folder_z=REG_FOLDER_Z;
-  // max_sm_flder=16;//a100
-  max_sm_flder=7;//v100
-  
-  int sharememory1 = 2*HALO*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
-  int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
-  printf("%d\n",executeSM);
-  executeSM+=sharememory2;
-  printf("%d\n",executeSM);
-
-#endif
 
 #if defined(PERSISTENTTHREAD)
-  int numBlocksPerSm_current=0;
+  int numBlocksPerSm_current=100;
 
+  #if defined(GEN)
+    int reg_folder_z=REG_FOLDER_Z;
+    executeSM+=reg_folder_z*2*HALO*(TILE_Y+TILE_X+2*isBOX);
+  #endif 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
-  numBlocksPerSm_current=min(numBlocksPerSm_current,blkpsm);
+  cudaCheckError();
+  if(blkpsm<=0)blkpsm=numBlocksPerSm_current;
+  numBlocksPerSm_current=min(blkpsm,numBlocksPerSm_current);
   // numBlocksPerSm_current=1;
   dim3 block_dim_3(bdimx, 1, 1);
   dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y)));
@@ -190,9 +184,28 @@ size_t executeSM=0;
   dim3 executeGridDim=grid_dim_3;
 
   printf("plckpersm is %d\n", numBlocksPerSm_current);
+  // printf("plckpersm is %f\n", (double)executeSM);
 #endif
 
+#if defined(GEN)
 
+  // 
+  int perSMUsable=SharedMemoryUsed/numBlocksPerSm_current;
+  int perSMValsRemaind=(perSMUsable-basic_sm_space)/sizeof(REAL);
+  int reg_boundary=reg_folder_z*2*HALO*(TILE_Y+TILE_X+2*isBOX);
+  // assert(perSMValsRemaind>=reg_boundary);
+  max_sm_flder=(perSMValsRemaind-reg_boundary)/(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y);
+  // printf("<%d>\n",max_sm_flder);
+  if(!useSM)max_sm_flder=0;
+  if(useSM&&max_sm_flder==0)return 1;
+
+  int sharememory1 = 2*HALO*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
+  int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
+  // printf("%d\n",executeSM);
+  executeSM=sharememory2+basic_sm_space;
+  printf("folder %d sm = %d\n",max_sm_flder,executeSM);
+
+#endif
   // printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
 
   size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2+
@@ -272,7 +285,7 @@ if(usewarmup)
   {
       // double accumulate=0;
       cudaEventRecord(warstart,0);
-      cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
+      cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
       cudaEventRecord(warmstop,0);
       cudaEventSynchronize(warmstop);
       cudaCheckError();
@@ -282,7 +295,7 @@ if(usewarmup)
       int nowiter=(350+nowwarmup-1)/nowwarmup;
       for(int i=0; i<nowiter; i++)
       {
-        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgs_NULL, executeSM,0);
+        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
       }
   }
   #endif

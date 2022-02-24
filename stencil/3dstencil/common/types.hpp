@@ -28,7 +28,9 @@
     template _macro(float,a,b,c,d,e);\
     template _macro(double,a,b,c,d,e)
 
-
+#define PERKS_INITIALIZE_ALL_TYPE_6ARG(_macro,a,b,c,d,e,f) \
+    template _macro(float,a,b,c,d,e,f);\
+    template _macro(double,a,b,c,d,e,f)
 
 
 #endif
