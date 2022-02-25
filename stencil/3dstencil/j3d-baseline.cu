@@ -129,10 +129,10 @@ kernel3d_persistent(REAL * __restrict__ input,
   
 
       // #endif
-      #ifdef BOX
+      // #ifdef BOX
       //star version can use multi-buffer to remove the necessarity of two sync
       __syncthreads();
-      #endif
+      // #endif
       // // reg 2 ptr
       reg2global3d<REAL, LOCAL_ITEM_PER_THREAD>(
             sum, output,

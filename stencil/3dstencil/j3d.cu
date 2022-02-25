@@ -143,7 +143,7 @@ size_t executeSM=0;
 #endif
 #ifdef BASELINE
   dim3 block_dim_2(bdimx, 1, 1);
-  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y));
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, min(height, max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y)));
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
   
@@ -179,7 +179,7 @@ size_t executeSM=0;
   numBlocksPerSm_current=min(blkpsm,numBlocksPerSm_current);
   // numBlocksPerSm_current=1;
   dim3 block_dim_3(bdimx, 1, 1);
-  dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y)));
+  dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MIN(height, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y))));
   dim3 executeBlockDim=block_dim_3;
   dim3 executeGridDim=grid_dim_3;
 
