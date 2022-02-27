@@ -34,7 +34,7 @@ namespace cg = cooperative_groups;
 #define MINBLOCK (1)
 
 template<class REAL, int halo, 
-int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y, const int reg_folder_z,int minblocks, bool UseSMCache >
+int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int reg_folder_z,int minblocks, bool UseSMCache >
 // __launch_bounds__(256, 2)
 __launch_bounds__(MAXTHREAD, minblocks)
 __global__ void 
@@ -45,7 +45,7 @@ kernel3d_general(REAL * __restrict__ input,
                                 int iteration,
                                 int max_sm_flder) 
 {
-  kernel3d_general_inner<REAL,halo,LOCAL_ITEM_PER_THREAD,LOCAL_TILE_X,LOCAL_TILE_Y,reg_folder_z,UseSMCache>
+  kernel3d_general_inner<REAL,halo,LOCAL_ITEM_PER_THREAD,LOCAL_TILE_X,reg_folder_z,UseSMCache>
   (input,output,width_z,width_y,width_x,l2_cache_i,l2_cache_o,iteration,max_sm_flder);
 }
 
@@ -65,10 +65,10 @@ kernel3d_general(REAL * __restrict__ input,
 // template __global__ void kernel3d_general<double,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,true> 
 //     (double *__restrict__, double *__restrict__ , int , int , int , double*,double*,int,int);
 #ifndef CONFIGURE
-  PERKS_INITIALIZE_ALL_TYPE_7ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,MINBLOCK,true);
-  PERKS_INITIALIZE_ALL_TYPE_7ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,MINBLOCK,false);
+  PERKS_INITIALIZE_ALL_TYPE_6ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,MINBLOCK,true);
+  PERKS_INITIALIZE_ALL_TYPE_6ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,MINBLOCK,false);
 #else
-  template __global__ void kernel3d_general<TYPE,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,BLOCKTYPE,isUseSM> 
+  template __global__ void kernel3d_general<TYPE,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,BLOCKTYPE,isUseSM> 
     (TYPE *__restrict__, TYPE *__restrict__ , int , int , int, TYPE*,TYPE*,int,int);
 #endif
 // #ifndef PERSISTENT 

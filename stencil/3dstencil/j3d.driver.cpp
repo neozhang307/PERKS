@@ -58,6 +58,63 @@ int main(int argc, char** argv) {
 
   if(bdimx==0)bdimx=256;////////////////////////might be a issue
   if(iteration==0)iteration=3;
+  #ifndef REFCHECK
+    if(usesmall)
+    {
+      if(fp32)
+      {
+        height=
+              j3d_iterative<float>(nullptr,
+                              height, width_y, width_x,
+                              nullptr, 
+                              bdimx, 
+                              blkpsm, 
+                              1, 
+                              useSM,
+                              false, 
+                              0,
+                              true);
+
+      }
+      else 
+      {
+        height=
+              j3d_iterative<double>(nullptr,
+                              height, width_y, width_x,
+                              nullptr, 
+                              bdimx, 
+                              blkpsm, 
+                              1, 
+                              useSM,
+                              false, 
+                              0,
+                              true);
+      }
+
+      if(height==0)
+      {
+        if(check)
+        {
+          printf("error unsupport no cache version small code\n");
+        }
+        return 0;
+      }
+      // printf("widis %d\n",width_y);
+    }
+
+    if(checkmindomain)
+    {
+      if(fp32)
+      {
+        printf("%d %d %d\n",getMinWidthY<float>(width_x, width_y, bdimx),width_y,width_x);
+      }
+      else
+      {
+        printf("%d %d %d\n",getMinWidthY<double>(width_x, width_y, bdimx),width_y,width_x);
+      }
+      return 0;
+    }
+  #endif
 
   if(fp32)
   {
@@ -78,9 +135,9 @@ int main(int argc, char** argv) {
       j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
     #else
       int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration);
-      if(err==1)
+      if(err==-1)
       {
-        if(check)printf("unsupport setting, no free space for cache with shared memory\n");
+        printf("unsupport setting, no free space for cache with shared memory\n");
         check=0;
       }
       if(check!=0)
@@ -122,7 +179,8 @@ int main(int argc, char** argv) {
       j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
     #else
       int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration);
-      if(err==1)
+      // printf("err is %d\n",err);
+      if(err==-1)
       {
         if(check)printf("unsupport setting, no free space for cache with shared memory\n");
         check=0;

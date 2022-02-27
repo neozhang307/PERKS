@@ -18,7 +18,7 @@
 
 namespace cg = cooperative_groups;
 
-template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int LOCAL_TILE_Y>
+template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X>
 __global__ void 
 // __launch_bounds__(256, 2)
 #ifndef PERSISTENT
@@ -33,6 +33,7 @@ kernel3d_persistent(REAL * __restrict__ input,
                                 int iteration) 
 #endif
 {
+  const int LOCAL_TILE_Y = LOCAL_ITEM_PER_THREAD*blockDim.x/LOCAL_TILE_X;
   const int tile_x_with_halo=LOCAL_TILE_X+2*halo;
   const int tile_y_with_halo=LOCAL_TILE_Y+2*halo;
   stencilParaT;
@@ -173,7 +174,7 @@ kernel3d_persistent(REAL * __restrict__ input,
 //     (double *__restrict__, double *__restrict__ , int , int , int );
 
 #ifndef PERSISTENT 
-  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y);
+  PERKS_INITIALIZE_ALL_TYPE_3ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,ITEM_PER_THREAD,TILE_X);
 #else
-  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y);
+  PERKS_INITIALIZE_ALL_TYPE_3ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,ITEM_PER_THREAD,TILE_X);
 #endif

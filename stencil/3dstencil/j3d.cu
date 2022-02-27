@@ -5,7 +5,11 @@
 // #include "./common/cuda_computation.cuh"
 // #include "./common/cuda_common.cuh"
 // #include "./common/types.hpp"
-#include "genconfig.cuh"
+#ifdef GEN
+#include "./genconfig.cuh"
+#endif
+
+
 #ifdef _TIMER_
 #include "cuda_profiler_api.h"
 #endif
@@ -25,7 +29,7 @@
 #if defined(NAIVE)||defined(BASELINE)||defined(BASELINE_CM)
   #define TRADITIONLAUNCH
 #endif
-#if defined(GEN)||defined(PERSISTENT)
+#if defined(GEN)||defined(PERSISTENT)||defined(GENWR)
   #define PERSISTENTLAUNCH
 #endif
 #if defined PERSISTENTLAUNCH||defined(BASELINE_CM)
@@ -35,6 +39,8 @@
   #define USEMAXSM
 #endif
 
+
+#include "./perksconfig.cuh"
 
 #define cudaCheckError() {                                          \
  cudaError_t e=cudaGetLastError();                                 \
@@ -58,6 +64,61 @@ void host_printptx(int&result)
   cudaDeviceSynchronize();
 }
 
+template<class REAL>
+int getMinWidthY(int width_x, int width_y, int global_bdimx)
+{
+  
+  int minwidthy1 = j3d_iterative<REAL>(nullptr,
+                            100000, width_y, width_x,
+                            nullptr, 
+                            global_bdimx, 
+                            1, 
+                            1, 
+                            false,
+                            false, 
+                            0,
+                            true);
+
+  int minwidthy2 = j3d_iterative<REAL>(nullptr,
+                            100000, width_y, width_x,
+                            nullptr, 
+                            global_bdimx, 
+                            2, 
+                            1, 
+                            false,
+                            false, 
+                            0,
+                            true);
+  int minwidthy3 = j3d_iterative<REAL>(nullptr,
+                            100000, width_y, width_x,
+                            nullptr, 
+                            global_bdimx, 
+                            1, 
+                            1, 
+                            true,
+                            false, 
+                            0,
+                            true);
+  int minwidthy4 = j3d_iterative<REAL>(nullptr,
+                            100000, width_y, width_x,
+                            nullptr, 
+                            global_bdimx, 
+                            2, 
+                            1, 
+                            true,
+                            false, 
+                            0,
+                            true);
+
+  int result = max(minwidthy1,minwidthy2);
+  result = max(result,minwidthy3);
+  result = max(result,minwidthy4);
+  return result;
+}
+
+template int getMinWidthY<float>  (int, int, int);
+template int getMinWidthY<double> (int, int, int);
+
 
 template<class REAL>
 int j3d_iterative(REAL * h_input,
@@ -68,8 +129,11 @@ int j3d_iterative(REAL * h_input,
   int iteration, 
   bool useSM,
   bool usewarmup, 
-  int warmupiteration)
+  int warmupiteration,
+  bool getminHeight)
 {
+  int TILE_Y = ITEM_PER_THREAD*global_bdimx/TILE_X;
+  if(blkpsm<=0)blkpsm=100;
   // int iteration=4;
 /* Host allocation Begin */
   int sm_count;
@@ -87,16 +151,56 @@ int j3d_iterative(REAL * h_input,
   auto execute_kernel = kernel3d_restrict<REAL,HALO>;
 #endif 
 #if defined(BASELINE) ||defined(BASELINE_CM)
-  auto execute_kernel = kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
+  auto execute_kernel = kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X>;
 #endif
 #ifdef PERSISTENT
-  auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y>;
+  auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X>;
 #endif
 #ifdef GEN
-  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,1,true>
-                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,TILE_Y,REG_FOLDER_Z,1,false>;
+  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,1,true>
+                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,1,false>;
 #endif
 
+#ifdef GENWR
+
+
+  auto execute_kernel = blkpsm>=2?
+   (useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,true,curshape>
+                        : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,false,curshape>)
+   :(useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,true,curshape>
+                        : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,false,curshape>);
+  int reg_folder_z = 0;
+  if(blkpsm>=2)
+  {
+    if(ptx==800)
+    {
+      reg_folder_z=useSM? regfolder<HALO,curshape,128,800,true,REAL>::val:
+                        regfolder<HALO,curshape,128,800,false,REAL>::val;
+    }
+    if(ptx==700)
+    {
+      reg_folder_z=useSM? regfolder<HALO,curshape,128,700,true,REAL>::val:
+                        regfolder<HALO,curshape,128,700,false,REAL>::val;
+    }
+  }
+  else
+  {
+    if(ptx==800)
+    {
+      reg_folder_z=useSM? regfolder<HALO,curshape,256,800,true,REAL>::val:
+                        regfolder<HALO,curshape,256,800,false,REAL>::val;
+    }
+    if(ptx==700)
+    {
+      reg_folder_z=useSM? regfolder<HALO,curshape,256,700,true,REAL>::val:
+                        regfolder<HALO,curshape,256,700,false,REAL>::val;
+    }  
+  }
+
+                      
+
+
+#endif                        
 //shared memory related 
 size_t executeSM=0;
 #ifndef NAIVE
@@ -109,40 +213,27 @@ size_t executeSM=0;
     // int sharememory2 = sharememory1 + sizeof(REAL) * (SFOLDER_Z)*(TILE_Y*2-1)*TILE_X;
 // #endif
 
-  REAL * input;
-  cudaMalloc(&input,sizeof(REAL)*(height*width_x*width_y));
-  Check_CUDA_Error("Allocation Error!! : input\n");
 
-  cudaGetLastError();
-  cudaMemcpy(input,h_input,sizeof(REAL)*(height*width_x*width_y), cudaMemcpyHostToDevice);
-  REAL * __var_1__;
-  cudaMalloc(&__var_1__,sizeof(REAL)*(height*width_x*width_y));
-  Check_CUDA_Error("Allocation Error!! : __var_1__\n");
-  REAL * __var_2__;
-  cudaMalloc(&__var_2__,sizeof(REAL)*(height*width_x*width_y));
-  Check_CUDA_Error("Allocation Error!! : __var_2__\n");
 
+//shared memory related 
 #ifdef USEMAXSM
   int maxSharedMemory;
   cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
-  int SharedMemoryUsed=maxSharedMemory-1024;
+  int SharedMemoryUsed=maxSharedMemory-2048;
   cudaFuncSetAttribute(execute_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
 #endif 
 
-/*Host Allocation End */
-/* Kernel Launch Begin */
-// #ifndef
-
 #ifdef NAIVE
-  dim3 block_dim_1(bdimx, 4, 1);
-  dim3 grid_dim_1(width_x/bdimx, width_y/4, height);
+  dim3 block_dim_1(global_bdimx, 4, 1);
+  dim3 grid_dim_1(width_x/global_bdimx, width_y/4, height);
 
   dim3 executeBlockDim=block_dim_1;
   dim3 executeGridDim=grid_dim_1;
 
 #endif
 #ifdef BASELINE
-  dim3 block_dim_2(bdimx, 1, 1);
+
+  dim3 block_dim_2(global_bdimx, 1, 1);
   dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, min(height, max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y)));
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
@@ -170,43 +261,66 @@ size_t executeSM=0;
 
   #if defined(GEN)
     int reg_folder_z=REG_FOLDER_Z;
+  #endif
+
+  #if defined(GEN)||defined(GENWR)
+
     executeSM+=reg_folder_z*2*HALO*(TILE_Y+TILE_X+2*isBOX);
   #endif 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numBlocksPerSm_current, execute_kernel, bdimx, executeSM);
+        &numBlocksPerSm_current, execute_kernel, global_bdimx, executeSM);
   cudaCheckError();
   if(blkpsm<=0)blkpsm=numBlocksPerSm_current;
   numBlocksPerSm_current=min(blkpsm,numBlocksPerSm_current);
   // numBlocksPerSm_current=1;
-  dim3 block_dim_3(bdimx, 1, 1);
+  dim3 block_dim_3(global_bdimx, 1, 1);
   dim3 grid_dim_3(width_x/TILE_X, width_y/TILE_Y, MIN(height, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y))));
   dim3 executeBlockDim=block_dim_3;
   dim3 executeGridDim=grid_dim_3;
 
-  printf("plckpersm is %d\n", numBlocksPerSm_current);
+  // printf("plckpersm is %d\n", numBlocksPerSm_current);
   // printf("plckpersm is %f\n", (double)executeSM);
 #endif
-
-#if defined(GEN)
+  int minHeight=0;
+#if defined(GEN)||defined(GENWR)
 
   // 
   int perSMUsable=SharedMemoryUsed/numBlocksPerSm_current;
   int perSMValsRemaind=(perSMUsable-basic_sm_space)/sizeof(REAL);
   int reg_boundary=reg_folder_z*2*HALO*(TILE_Y+TILE_X+2*isBOX);
-  // assert(perSMValsRemaind>=reg_boundary);
-  max_sm_flder=(perSMValsRemaind-reg_boundary)/(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y);
-  // printf("<%d>\n",max_sm_flder);
+  max_sm_flder=(perSMValsRemaind-reg_boundary)/(2*HALO*(TILE_Y+TILE_X+2*isBOX)+TILE_X*TILE_Y);
+  // printf(">>%ld,%ld\n",perSMUsable/1024,perSMValsRemaind/1024);
+  // printf(">>%ld,%ld\n",(perSMValsRemaind-reg_boundary),(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y));
+  // printf(">>%ld\n",(max_sm_flder*(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y))*sizeof(REAL)/1024);
   if(!useSM)max_sm_flder=0;
-  if(useSM&&max_sm_flder==0)return 1;
+  if(useSM&&max_sm_flder==0)return -1;
+
 
   int sharememory1 = 2*HALO*(TILE_Y+TILE_X+2*isBOX)*(max_sm_flder+reg_folder_z)*sizeof(REAL);//boundary
   int sharememory2 = sharememory1 + sizeof(REAL) * (max_sm_flder)*(TILE_Y)*TILE_X;
-  // printf("%d\n",executeSM);
   executeSM=sharememory2+basic_sm_space;
-  printf("folder %d sm = %d\n",max_sm_flder,executeSM);
+  
+  minHeight=(max_sm_flder+reg_folder_z+2*NOCACHE_Z)*executeGridDim.z;
 
+  // printf("numblkpsm is %ld\n",numBlocksPerSm_current);
+  // printf("smfolder is %ld\n",max_sm_flder);
+  // printf("SM is %ld/%ld KB\n",executeSM/1024,SharedMemoryUsed/1024);
 #endif
   // printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
+  if(getminHeight)return (minHeight);
+
+  REAL * input;
+  cudaMalloc(&input,sizeof(REAL)*(height*width_x*width_y));
+  Check_CUDA_Error("Allocation Error!! : input\n");
+
+  cudaGetLastError();
+  cudaMemcpy(input,h_input,sizeof(REAL)*(height*width_x*width_y), cudaMemcpyHostToDevice);
+  REAL * __var_1__;
+  cudaMalloc(&__var_1__,sizeof(REAL)*(height*width_x*width_y));
+  Check_CUDA_Error("Allocation Error!! : __var_1__\n");
+  REAL * __var_2__;
+  cudaMalloc(&__var_2__,sizeof(REAL)*(height*width_x*width_y));
+  Check_CUDA_Error("Allocation Error!! : __var_2__\n");
 
   size_t L2_utage = width_y*height*sizeof(REAL)*HALO*(width_x/TILE_X)*2+
                     width_x*height*sizeof(REAL)*HALO*(width_y/TILE_Y)*2  ;
@@ -338,7 +452,9 @@ if(usewarmup)
   printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000);
   printf("[FORMA] Computation(GFLOPS/s) : %lf\n",(REAL)iteration*height*width_x*width_y*(HALO*2+1)*(HALO*2+1)/ elapsedTime/1000/1000);
   printf("[FORMA] Bandwidht(GB/s) : %lf\n",(REAL)iteration*height*width_x*width_y*sizeof(REAL)*2/ elapsedTime/1000/1000);
-  printf("[FORMA] rfder : %d\n",REG_FOLDER_Z);
+#if defined(GEN)||defined(GENWR)  
+  printf("[FORMA] rfder : %d\n",reg_folder_z);
+#endif
 #ifdef PERSISTENTLAUNCH
   printf("[FORMA] sfder : %d\n",max_sm_flder);
   // printf("[FORMA] sm : %f\n",executeSM/1024);
@@ -353,8 +469,11 @@ if(usewarmup)
   #ifndef NAIVE
   printf("%f\t",(double)basic_sm_space/1024);
   #endif
-  printf("%f\t%lf\n",elapsedTime,(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000); 
-
+  printf("%f\t%lf\t",elapsedTime,(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000); 
+  #if defined(GEN)||defined(GENWR)
+    printf("%d\t%d\t",reg_folder_z,max_sm_flder);
+  #endif
+  printf("\n");
 #endif
   cudaEventDestroy(_forma_timer_start_);
   cudaEventDestroy(_forma_timer_stop_);

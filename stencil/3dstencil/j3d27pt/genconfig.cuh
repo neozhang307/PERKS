@@ -1,1 +1,1 @@
-#define REG_FOLDER_Z (2)
+#define REG_FOLDER_Z (0)
