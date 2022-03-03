@@ -15,14 +15,17 @@
 
 
 
-#define bdimx (256)
+// #define bdimx (256)
 // #define bdimx (128)
 
 // #define ITEM_PER_THREAD (8) 
-#define ITEM_PER_THREAD (8) 
+// #ifndef ITEM_PER_THREAD
+//   #define ITEM_PER_THREAD (8) 
+// #endif
 // (TILE_Y/(bdimx/TILE_X))
-
-#define TILE_X (64)
+#ifndef TILE_X
+  #define TILE_X (64)
+#endif
 // #define TILE_Y (ITEM_PER_THREAD*bdimx/TILE_X)
 
 // #define NOCACHE_Y (HALO)
@@ -78,7 +81,7 @@
     #define isBOX (0)
     #define stencilParaList const REAL west[HALO],const REAL east[HALO],const REAL north[HALO],const REAL south[HALO],const REAL top[HALO], const REAL bottom[HALO], const REAL center
     #define stencilParaInput  west,east,north,south,top,bottom,center
-    #define REG_Y_SIZE_MOD (ITEM_PER_THREAD)
+    #define REG_Y_SIZE_MOD (LOCAL_ITEM_PER_THREAD)
 #else
   #ifndef TYPE0
     #define curshape (box_shape)
@@ -142,7 +145,8 @@
 #endif
 
 
-template<class REAL, int RESULT_SIZE, int halo, int SMZ_SIZE=halo+1+halo, int REGZ_SIZE=2*halo+1, int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1, int REG_BASE=halo>
+// template<class REAL, int RESULT_SIZE, int halo, int SMZ_SIZE=halo+1+halo, int REGZ_SIZE=2*halo+1, int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1, int REG_BASE=halo>
+template<class REAL, int RESULT_SIZE, int halo, int REGY_SIZE,  int REGZ_SIZE=2*halo+1, int REGX_SIZE=2*halo+1, int REG_BASE=halo, int SMZ_SIZE=halo+1+halo>
 __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
                                             REAL* sm_ptr[SMZ_SIZE], 
                                             int sm_y_base, int sm_width, int sm_x_ind,
@@ -227,13 +231,15 @@ __device__ void __forceinline__ computation(REAL result[RESULT_SIZE],
         }
       }
     }
+    _Pragma("unroll")
     for(int l_y=0; l_y<RESULT_SIZE; l_y++)
     {
-      // for(int h_y=0; h_y<3; h_y++)
       {
         int h_y=2*halo;
+        _Pragma("unroll")
         for(int h_z=0; h_z<2*halo+1; h_z++)
         {
+          _Pragma("unroll")
           for(int h_x=0; h_x<2*halo+1; h_x++)
           {
             reg_ptr[h_z][h_y][h_x]
@@ -282,11 +288,11 @@ __global__ void kernel3d_restrict(REAL* input, REAL* output,
 #define PERKS_DECLARE_INITIONIZATION_NAIVE(_type,halo) \
     __global__ void kernel3d_restrict<_type,halo>(_type*,_type*,int,int,int);
 
-template<class REAL, int halo , int ipt, int tilex>
+template<class REAL, int halo , int ipt, int tilex, int blockdim=256>
 __global__ void kernel3d_baseline(REAL* __restrict__ input, REAL*__restrict__ output,
                                   int height, int width_y, int width_x); 
-#define PERKS_DECLARE_INITIONIZATION_BASELINE(_type,halo,ipt,tilex) \
-    __global__ void kernel3d_baseline<_type,halo,ipt,tilex>(_type*__restrict__,_type*__restrict__,int,int,int);
+#define PERKS_DECLARE_INITIONIZATION_BASELINE(_type,halo,ipt,tilex,blockdim) \
+    __global__ void kernel3d_baseline<_type,halo,ipt,tilex,blockdim>(_type*__restrict__,_type*__restrict__,int,int,int);
 
 
 // template<class REAL, int halo , int ipt, int tilex, int tiley>
@@ -296,30 +302,61 @@ __global__ void kernel3d_baseline(REAL* __restrict__ input, REAL*__restrict__ ou
 //     __global__ void kernel3d_baseline_memwarp<_type,halo,ipt,tilex,tiley>(_type*__restrict__,_type*__restrict__,int,int,int);
 
 
-template<class REAL, int halo, int ipt, int tilex>
+template<class REAL, int halo, int ipt, int tilex, int blockdim=256>
 __global__ void kernel3d_persistent(REAL* __restrict__ input, REAL*__restrict__ output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration); 
-#define PERKS_DECLARE_INITIONIZATION_PERSISTENT(_type,halo,ipt,tilex) \
-    __global__ void kernel3d_persistent<_type,halo,ipt,tilex>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int);
+#define PERKS_DECLARE_INITIONIZATION_PERSISTENT(_type,halo,ipt,tilex,blockdim) \
+    __global__ void kernel3d_persistent<_type,halo,ipt,tilex,blockdim>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int);
 
 
+// minblocks:
+// 256 bdim
+// float: 
+//   ipt=8 -> 1 or 2
+//   ipt=16 -> 1
+// double:
+//   -> 1
+//  128 bdim:
+// ( 256 bdim )*2
+template<class REAL, int blocktype, int itemperblock>
+struct getminblocks
+{
+  static int const val=1;
+};
+template<>
+struct getminblocks<float,2,8>
+//only in float precision and itb==8 we need a situation of 
+{
+  static int const val=2;  
+};
+template<>
+struct getminblocks<double,2,8>
+//only in float precision and itb==8 we need a situation of 
+{
+  static int const val=2;  
+};
 
-template<class REAL, int halo, int ipt, int tilex, int reg_folder_z=0,int minblocks =1,  bool UseSMCache=false>
+
+template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int tilex, 
+    int reg_folder_z=0,int blocktype,  bool UseSMCache=false, 
+    int BLOCKDIM=256, 
+    int minblocks=getminblocks<REAL,blocktype,LOCAL_ITEM_PER_THREAD>::val>
 __global__ void kernel3d_general(REAL* __restrict__ input, REAL*__restrict__ output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration, int max_sm_flder=0); 
-#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,regf,minblocks, usesm) \
-    __global__ void kernel3d_general<_type,halo,ipt,tilex,regf,minblocks,usesm>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
+
+#define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,regf,minblocks, usesm,blckdim) \
+    __global__ void kernel3d_general<_type,halo,ipt,tilex,regf,minblocks,usesm,blckdim>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
 
 
 
 #include "../perksconfig.cuh"
 #include "./cuda_common.cuh"
 template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X,
-          int registeramount, bool UseSMCache, int shape=star_shape,
+          int registeramount, bool UseSMCache, int BLOCKDIM, int shape=star_shape,
           int minblocks=256/registeramount>
 __global__ void  kernel3d_general_wrapper
 (REAL* __restrict__ input, REAL*__restrict__ output,
@@ -327,7 +364,7 @@ __global__ void  kernel3d_general_wrapper
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration, int max_sm_flder=0);
 
-#define PERKS_DECLARE_INITIONIZATION_GENERAL_WRAPPER(_type,halo,ttile,tilex,ramount,usesm,shape) \
-    __global__ void kernel3d_general_wrapper<_type,halo,ttile,tilex,ramount,usesm,shape>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
+#define PERKS_DECLARE_INITIONIZATION_GENERAL_WRAPPER(_type,halo,ttile,tilex,ramount,usesm,blockdim,shape) \
+    __global__ void kernel3d_general_wrapper<_type,halo,ttile,tilex,ramount,usesm,blockdim,shape>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
 
 

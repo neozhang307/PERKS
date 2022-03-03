@@ -35,4 +35,8 @@
 #define PERKS_INITIALIZE_ALL_TYPE_7ARG(_macro,a,b,c,d,e,f,g) \
     template _macro(float,a,b,c,d,e,f,g);\
     template _macro(double,a,b,c,d,e,f,g)
+
+#define PERKS_INITIALIZE_ALL_TYPE_8ARG(_macro,a,b,c,d,e,f,g,h) \
+    template _macro(float,a,b,c,d,e,f,g,h);\
+    template _macro(double,a,b,c,d,e,f,g,h)    
 #endif

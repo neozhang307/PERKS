@@ -18,7 +18,7 @@
 
 namespace cg = cooperative_groups;
 
-template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X>
+template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int BLOCKDIM>
 __global__ void 
 // __launch_bounds__(256, 2)
 #ifndef PERSISTENT
@@ -33,7 +33,11 @@ kernel3d_persistent(REAL * __restrict__ input,
                                 int iteration) 
 #endif
 {
-  const int LOCAL_TILE_Y = LOCAL_ITEM_PER_THREAD*blockDim.x/LOCAL_TILE_X;
+  #define LOCAL_TILE_Y (LOCAL_ITEM_PER_THREAD*BLOCKDIM/LOCAL_TILE_X)
+  #define gdim_y (BLOCKDIM/LOCAL_TILE_X)
+  // const int LOCAL_TILE_Y = LOCAL_ITEM_PER_THREAD*BLOCKDIM/LOCAL_TILE_X;
+  // const int gdim_y = LOCAL_TILE_Y/LOCAL_ITEM_PER_THREAD;
+
   const int tile_x_with_halo=LOCAL_TILE_X+2*halo;
   const int tile_y_with_halo=LOCAL_TILE_Y+2*halo;
   stencilParaT;
@@ -53,7 +57,6 @@ kernel3d_persistent(REAL * __restrict__ input,
   }
   const int tid_x = threadIdx.x%LOCAL_TILE_X;
   const int tid_y = threadIdx.x/LOCAL_TILE_X;
-  const int gdim_y = LOCAL_TILE_Y/LOCAL_ITEM_PER_THREAD;
   const int cpblocksize_y=(LOCAL_TILE_Y+2*halo)/gdim_y;
   const int cpquotion_y=(LOCAL_TILE_Y+2*halo)%gdim_y;
   const int index_y = LOCAL_ITEM_PER_THREAD*tid_y;
@@ -90,16 +93,34 @@ kernel3d_persistent(REAL * __restrict__ input,
                                           cpbase_y, cpend_y, 1, ps_y,
                                           // cpsize_y, ps_y,cpbase_y, 
                                           LOCAL_TILE_X, tid_x);
+    // global2sm<REAL, halo, -isBOX, halo + isBOX, halo+isBOX+1, 0, ITEM_PER_THREAD, gdim_y, false, true>
+    //                                       (input, smbuffer_buffer_ptr,
+    //                                         p_x, p_y, p_z,
+    //                                         width_x, width_y, width_z,
+    //                                         tile_x_with_halo, ps_x,
+    //                                         ps_y,
+    //                                         LOCAL_TILE_X,tid_x,tid_y);
+
     // // __syncthreads();
     for(int global_z=p_z; global_z<p_z_end; global_z+=1)
     {
-      global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
+      // global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, false, true>
+      //                                     (input, smbuffer_buffer_ptr,
+      //                                       p_x, p_y, global_z,
+      //                                       width_x, width_y, width_z,
+      //                                       tile_x_with_halo, ps_x,
+      //                                       cpbase_y, cpend_y, 1, ps_y,
+      //                                       LOCAL_TILE_X,tid_x);
+
+      global2sm<REAL, halo, halo, 1, halo+1+isBOX, halo+isBOX, LOCAL_ITEM_PER_THREAD, gdim_y, false, true>
                                           (input, smbuffer_buffer_ptr,
                                             p_x, p_y, global_z,
                                             width_x, width_y, width_z,
                                             tile_x_with_halo, ps_x,
-                                            cpbase_y, cpend_y, 1, ps_y,
-                                            LOCAL_TILE_X,tid_x);
+                                            ps_y,
+                                            LOCAL_TILE_X,tid_x,tid_y);
+
+      __syncthreads();                          
       #ifndef BOX
         //sm2reg
         sm2regs<REAL, LOCAL_ITEM_PER_THREAD, 1+2*halo, 
@@ -122,7 +143,7 @@ kernel3d_persistent(REAL * __restrict__ input,
 
       //main computation
       // #ifndef BOX
-      computation<REAL,LOCAL_ITEM_PER_THREAD,halo>( sum,
+      computation<REAL,LOCAL_ITEM_PER_THREAD,halo,REG_Y_SIZE_MOD>( sum,
                                         smbuffer_buffer_ptr,
                                         ps_y+index_y, tile_x_with_halo, tid_x+ps_x,
                                         r_smbuffer,
@@ -165,6 +186,8 @@ kernel3d_persistent(REAL * __restrict__ input,
       input=tmp_ptr;
     #endif
   }
+  #undef LOCAL_TILE_X
+  #undef gdim_y
 }
 
 
@@ -174,7 +197,13 @@ kernel3d_persistent(REAL * __restrict__ input,
 //     (double *__restrict__, double *__restrict__ , int , int , int );
 
 #ifndef PERSISTENT 
-  PERKS_INITIALIZE_ALL_TYPE_3ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,ITEM_PER_THREAD,TILE_X);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,8,TILE_X,128);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,8,TILE_X,256);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,16,TILE_X,128);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO,16,TILE_X,256);
 #else
-  PERKS_INITIALIZE_ALL_TYPE_3ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,ITEM_PER_THREAD,TILE_X);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,8,TILE_X,128);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,8,TILE_X,256);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,16,TILE_X,128);
+  PERKS_INITIALIZE_ALL_TYPE_4ARG(PERKS_DECLARE_INITIONIZATION_PERSISTENT,HALO,16,TILE_X,256);
 #endif

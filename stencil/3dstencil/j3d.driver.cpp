@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
                               useSM,
                               false, 
                               0,
+                              isDoubleTile,
                               true);
 
       }
@@ -88,6 +89,7 @@ int main(int argc, char** argv) {
                               useSM,
                               false, 
                               0,
+                              isDoubleTile,
                               true);
       }
 
@@ -134,7 +136,7 @@ int main(int argc, char** argv) {
       j3d_gold((REAL*)input, height, width_y, width_x, (REAL*)output);
       j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration);
+      int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration,isDoubleTile);
       if(err==-1)
       {
         printf("unsupport setting, no free space for cache with shared memory\n");
@@ -178,7 +180,7 @@ int main(int argc, char** argv) {
       j3d_gold((REAL*)input, height, width_y, width_x, (REAL*)output);
       j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);
     #else
-      int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration);
+      int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration,isDoubleTile);
       // printf("err is %d\n",err);
       if(err==-1)
       {

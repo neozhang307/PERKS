@@ -40,6 +40,8 @@
 #endif
 
 
+#define ITEM_PER_THREAD (8)
+
 #include "./perksconfig.cuh"
 
 #define cudaCheckError() {                                          \
@@ -65,7 +67,7 @@ void host_printptx(int&result)
 }
 
 template<class REAL>
-int getMinWidthY(int width_x, int width_y, int global_bdimx)
+int getMinWidthY(int width_x, int width_y, int global_bdimx, bool isDoubleTile)
 {
   
   int minwidthy1 = j3d_iterative<REAL>(nullptr,
@@ -77,6 +79,7 @@ int getMinWidthY(int width_x, int width_y, int global_bdimx)
                             false,
                             false, 
                             0,
+                            isDoubleTile,
                             true);
 
   int minwidthy2 = j3d_iterative<REAL>(nullptr,
@@ -88,6 +91,7 @@ int getMinWidthY(int width_x, int width_y, int global_bdimx)
                             false,
                             false, 
                             0,
+                            isDoubleTile,
                             true);
   int minwidthy3 = j3d_iterative<REAL>(nullptr,
                             100000, width_y, width_x,
@@ -98,6 +102,7 @@ int getMinWidthY(int width_x, int width_y, int global_bdimx)
                             true,
                             false, 
                             0,
+                            isDoubleTile,
                             true);
   int minwidthy4 = j3d_iterative<REAL>(nullptr,
                             100000, width_y, width_x,
@@ -108,6 +113,7 @@ int getMinWidthY(int width_x, int width_y, int global_bdimx)
                             true,
                             false, 
                             0,
+                            isDoubleTile,
                             true);
 
   int result = max(minwidthy1,minwidthy2);
@@ -116,8 +122,8 @@ int getMinWidthY(int width_x, int width_y, int global_bdimx)
   return result;
 }
 
-template int getMinWidthY<float>  (int, int, int);
-template int getMinWidthY<double> (int, int, int);
+template int getMinWidthY<float>  (int, int, int, bool);
+template int getMinWidthY<double> (int, int, int, bool);
 
 
 template<class REAL>
@@ -130,9 +136,17 @@ int j3d_iterative(REAL * h_input,
   bool useSM,
   bool usewarmup, 
   int warmupiteration,
+  bool isDoubleTile,
   bool getminHeight)
 {
-  int TILE_Y = ITEM_PER_THREAD*global_bdimx/TILE_X;
+  const int LOCAL_ITEM_PER_THREAD=isDoubleTile?ITEM_PER_THREAD*2:ITEM_PER_THREAD;
+  global_bdimx=global_bdimx==128?128:256;
+  if(isDoubleTile)
+  {
+    if(global_bdimx==256)blkpsm=1;
+    if(global_bdimx==128)blkpsm=min(blkpsm,2);
+  }
+  int TILE_Y = LOCAL_ITEM_PER_THREAD*global_bdimx/TILE_X;
   if(blkpsm<=0)blkpsm=100;
   // int iteration=4;
 /* Host allocation Begin */
@@ -151,51 +165,175 @@ int j3d_iterative(REAL * h_input,
   auto execute_kernel = kernel3d_restrict<REAL,HALO>;
 #endif 
 #if defined(BASELINE) ||defined(BASELINE_CM)
-  auto execute_kernel = kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X>;
+  auto execute_kernel = isDoubleTile?(global_bdimx==128? kernel3d_baseline<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,128>
+                              :kernel3d_baseline<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256>):
+   (global_bdimx==128? kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X,128>
+                              :kernel3d_baseline<REAL,HALO,ITEM_PER_THREAD,TILE_X,256>);
 #endif
 #ifdef PERSISTENT
-  auto execute_kernel = kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X>;
+  auto execute_kernel = isDoubleTile?(global_bdimx==128?kernel3d_persistent<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,128>
+                              :kernel3d_persistent<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256>):
+                                (global_bdimx==128?kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,128>
+                              :kernel3d_persistent<REAL,HALO,ITEM_PER_THREAD,TILE_X,256>);
 #endif
 #ifdef GEN
-  auto execute_kernel = useSM? kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,1,true>
-                        : kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,1,false>;
+  auto execute_kernel = 
+                      useSM?
+                        (global_bdimx==128?
+                          (blkpsm>=4? 
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,2*ITEM_PER_THREAD>::val,true,128>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,ITEM_PER_THREAD>::val,true,128>):
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,2*ITEM_PER_THREAD>::val,true,128>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,ITEM_PER_THREAD>::val,true,128>))
+                          : 
+                          (blkpsm>=2? 
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,2*ITEM_PER_THREAD>::val,true,256>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,ITEM_PER_THREAD>::val,true,256>):
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,2*ITEM_PER_THREAD>::val,true,256>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,ITEM_PER_THREAD>::val,true,256>)))
+                        :
+                          (global_bdimx==128?
+                          (blkpsm>=4? 
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,2*ITEM_PER_THREAD>::val,false,128>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,ITEM_PER_THREAD>::val,false,128>):
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,2*ITEM_PER_THREAD>::val,false,128>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,ITEM_PER_THREAD>::val,false,128>))
+                          : 
+                          (blkpsm>=2? 
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,2*ITEM_PER_THREAD>::val,false,256>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,2,ITEM_PER_THREAD>::val,false,256>):
+                            (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,2*ITEM_PER_THREAD>::val,false,256>
+                              :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,ITEM_PER_THREAD>::val,false,256>)))
+                        ;
+
 #endif
 
 #ifdef GENWR
 
+  auto execute_kernel = isDoubleTile?
 
-  auto execute_kernel = blkpsm>=2?
-   (useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,true,curshape>
-                        : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,false,curshape>)
-   :(useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,true,curshape>
-                        : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,false,curshape>);
+                  (global_bdimx==128?
+                      (blkpsm>=4?
+                       (useSM? kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,true,128,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,false,128,curshape>)
+                       :(useSM? kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,true,128,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,false,128,curshape>)):
+                        (blkpsm>=2?
+                       (useSM? kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,true,256,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,false,256,curshape>)
+                       :(useSM? kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,true,256,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,256,false,256,curshape>)))
+                  :
+                  (global_bdimx==128?
+                      (blkpsm>=4?
+                       (useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,true,128,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,false,128,curshape>)
+                       :(useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,true,128,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,false,128,curshape>)):
+                        (blkpsm>=2?
+                       (useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,true,256,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,128,false,256,curshape>)
+                       :(useSM? kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,true,256,curshape>
+                                            : kernel3d_general_wrapper<REAL,HALO,ITEM_PER_THREAD,TILE_X,256,false,256,curshape>)))
+                  ;
   int reg_folder_z = 0;
-  if(blkpsm>=2)
+  // if(isDoubleTile)
   {
-    if(ptx==800)
+    if(global_bdimx==128)
     {
-      reg_folder_z=useSM? regfolder<HALO,curshape,128,800,true,REAL>::val:
-                        regfolder<HALO,curshape,128,800,false,REAL>::val;
+      if(blkpsm>=4)
+      {
+        if(ptx==800)
+        {
+          reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,true,REAL>::val:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,false,REAL>::val;
+        }
+        if(ptx==700)
+        {
+          reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,true,REAL>::val:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,false,REAL>::val;
+        }
+      }
+      else
+      { 
+        if(isDoubleTile)
+        {
+          if(ptx==800)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+          }
+          if(ptx==700)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+          } 
+        }
+        else
+        {
+          if(ptx==800)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,false,REAL>::val;
+          }
+          if(ptx==700)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,false,REAL>::val;
+          } 
+        }
+        
+      }
     }
-    if(ptx==700)
+    else
     {
-      reg_folder_z=useSM? regfolder<HALO,curshape,128,700,true,REAL>::val:
-                        regfolder<HALO,curshape,128,700,false,REAL>::val;
+      if(blkpsm>=2)
+      {
+        if(ptx==800)
+        {
+          reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,true,REAL>::val:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,false,REAL>::val;
+        }
+        if(ptx==700)
+        {
+          reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,true,REAL>::val:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,false,REAL>::val;
+        }
+      }
+      else
+      { 
+        if(isDoubleTile)
+        {
+          if(ptx==800)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+          }
+          if(ptx==700)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+          }  
+        }
+        else
+        {
+          if(ptx==800)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,false,REAL>::val;
+          }
+          if(ptx==700)
+          {
+            reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,false,REAL>::val;
+          }  
+        }
+        
+      }
     }
   }
-  else
-  {
-    if(ptx==800)
-    {
-      reg_folder_z=useSM? regfolder<HALO,curshape,256,800,true,REAL>::val:
-                        regfolder<HALO,curshape,256,800,false,REAL>::val;
-    }
-    if(ptx==700)
-    {
-      reg_folder_z=useSM? regfolder<HALO,curshape,256,700,true,REAL>::val:
-                        regfolder<HALO,curshape,256,700,false,REAL>::val;
-    }  
-  }
+
+
 
                       
 
@@ -204,7 +342,7 @@ int j3d_iterative(REAL * h_input,
 //shared memory related 
 size_t executeSM=0;
 #ifndef NAIVE
-    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+2*HALO)*(1+HALO+isBOX)+1)*sizeof(REAL);
+    int basic_sm_space=((TILE_Y+2*HALO)*(TILE_X+HALO+isBOX)*(1+HALO*2)+1)*sizeof(REAL);
     executeSM=basic_sm_space;
 #endif
 // printf("sm is %ld\n",executeSM);
@@ -357,41 +495,41 @@ if(usewarmup)
   cudaEventCreate(&warmstop);
   #ifdef TRADITIONLAUNCH
   {
-      cudaEventRecord(warstart,0);
-      // cudaCheckError();
+    cudaEventRecord(warstart,0);
+    // cudaCheckError();
+    for(int i=0; i<l_warmupiteration; i++)
+    {
+      // execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+      //       (__var_2__, width_y, width_x , __var_1__);
+      execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
+          (__var_2__, __var_1__,  height, width_y, width_x);
+      REAL* tmp = __var_2__;
+      __var_2__=__var_1__;
+      __var_1__= tmp;
+
+    } 
+    cudaEventRecord(warmstop,0);
+    cudaEventSynchronize(warmstop);
+    cudaCheckError();
+    float warmelapsedTime;
+    cudaEventElapsedTime(&warmelapsedTime,warstart,warmstop);
+    float nowwarmup=(warmelapsedTime);
+    // nowwarmup = max()
+    int nowiter=(350+nowwarmup-1)/nowwarmup;
+
+    for(int out=0; out<nowiter; out++)
+    {
       for(int i=0; i<l_warmupiteration; i++)
       {
         // execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-        //       (__var_2__, width_y, width_x , __var_1__);
+              // (__var_2__, width_y, width_x , __var_1__);
         execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-            (__var_2__, __var_1__,  height, width_y, width_x);
+          (__var_2__, __var_1__,  height, width_y, width_x);
         REAL* tmp = __var_2__;
         __var_2__=__var_1__;
         __var_1__= tmp;
-
-      } 
-      cudaEventRecord(warmstop,0);
-      cudaEventSynchronize(warmstop);
-      cudaCheckError();
-      float warmelapsedTime;
-      cudaEventElapsedTime(&warmelapsedTime,warstart,warmstop);
-      float nowwarmup=(warmelapsedTime);
-      // nowwarmup = max()
-      int nowiter=(350+nowwarmup-1)/nowwarmup;
-
-      for(int out=0; out<nowiter; out++)
-      {
-        for(int i=0; i<l_warmupiteration; i++)
-        {
-          // execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-                // (__var_2__, width_y, width_x , __var_1__);
-          execute_kernel<<<executeGridDim, executeBlockDim, executeSM>>>
-            (__var_2__, __var_1__,  height, width_y, width_x);
-          REAL* tmp = __var_2__;
-          __var_2__=__var_1__;
-          __var_1__= tmp;
-        }       
-      }
+      }       
+    }
   }
   #endif 
   
@@ -463,7 +601,7 @@ if(usewarmup)
   // h y x iter TILEX thready=1 gridx gridy latency speed 
   printf("%d\t%d\t",ptx,sizeof(REAL)/4);
   printf("%d\t%d\t%d\t%d\t",height,width_y,width_x,iteration); 
-  printf("%d\t<%d,%d,%d>\t%d\t%d\t",executeBlockDim.x,
+  printf("%d\t%d\t<%d,%d,%d>\t%d\t%d\t",executeBlockDim.x,LOCAL_ITEM_PER_THREAD,
         executeGridDim.x,executeGridDim.y,executeGridDim.z,sm_count,
         (executeGridDim.x)*(executeGridDim.y)*(executeGridDim.z)/sm_count);
   #ifndef NAIVE
@@ -471,7 +609,7 @@ if(usewarmup)
   #endif
   printf("%f\t%lf\t",elapsedTime,(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000); 
   #if defined(GEN)||defined(GENWR)
-    printf("%d\t%d\t",reg_folder_z,max_sm_flder);
+    printf("%d\t%d\t%d\t",reg_folder_z,max_sm_flder,executeSM/1024);
   #endif
   printf("\n");
 #endif

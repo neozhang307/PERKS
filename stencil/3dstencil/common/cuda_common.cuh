@@ -274,7 +274,7 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
   for(int l_z=0; l_z<SIZE_Z; l_z++)
   {
     int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-    // if(!isInit)
+    if(!isInit)
     {
         l_global_z = (MIN(l_global_z,width_z-1));
     }
@@ -299,6 +299,118 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
     __syncthreads();
   }
 }
+
+template<class REAL, int halo, int BASE_Z, int SIZE_Z, int SMSIZE, int SM_BASE_Z=BASE_Z,  int LOCAL_ITEM_PER_THREAD, int gdim_y, bool isInit=false, bool sync=true>
+__device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[SMSIZE],
+                                          int gbase_x, int gbase_y, int gbase_z,
+                                          int width_x, int width_y, int width_z,
+                                          int sm_width_x, int sm_base_x,
+                                          int sm_base_y,
+                                          int tile_x, int tid_x, int tid_y)
+{
+  _Pragma("unroll")
+  for(int l_z=0; l_z<SIZE_Z; l_z++)
+  {
+    int l_global_z;
+    if(!isInit)
+    {
+        l_global_z = (MIN(gbase_z+l_z+BASE_Z,width_z-1));
+    }
+    else
+    {
+       l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
+    }
+
+    #pragma unroll
+    for(int i=0; i<LOCAL_ITEM_PER_THREAD; i++)
+    {
+      int l_y=i+tid_y*LOCAL_ITEM_PER_THREAD-halo;
+      int l_global_y = (MIN(gbase_y+l_y,width_y-1));
+        l_global_y = (MAX(l_global_y,0));
+        smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
+            src[l_global_z*width_x*width_y+l_global_y*width_x+
+            MAX((gbase_x+tid_x-halo),0)];
+      if(tid_x<halo*2)
+      {
+          smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
+              src[l_global_z*width_x*width_y+l_global_y*width_x+
+                MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
+      }
+    }
+    if(gdim_y>=2*halo)
+    {
+      // if(tid_y==0)
+      {
+        // #pragma unroll
+        // for(int i=0; i<2*halo; i++)
+        if(tid_y<2*halo)
+        {
+          int l_y=tid_y+gdim_y*LOCAL_ITEM_PER_THREAD-halo;
+          int l_global_y = (MIN(gbase_y+l_y,width_y-1));
+            l_global_y = (MAX(l_global_y,0));
+            smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
+                src[l_global_z*width_x*width_y+l_global_y*width_x+
+                MAX((gbase_x+tid_x-halo),0)];
+          if(tid_x<halo*2)
+          {
+              smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
+                  src[l_global_z*width_x*width_y+l_global_y*width_x+
+                    MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
+          }
+        }
+      }
+    }
+    else if(gdim_y>=2)
+    {
+      if(tid_y<2)
+      {
+        #pragma unroll
+        for(int i=0; i<halo; i++)
+        {
+          int l_y=i+2*tid_y+gdim_y*LOCAL_ITEM_PER_THREAD-halo;
+          int l_global_y = (MIN(gbase_y+l_y,width_y-1));
+            l_global_y = (MAX(l_global_y,0));
+            smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
+                src[l_global_z*width_x*width_y+l_global_y*width_x+
+                MAX((gbase_x+tid_x-halo),0)];
+          if(tid_x<halo*2)
+          {
+              smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
+                  src[l_global_z*width_x*width_y+l_global_y*width_x+
+                    MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
+          }
+        }
+      }
+    }
+    else
+    {
+      if(tid_y==0)
+      {
+        #pragma unroll
+        for(int i=0; i<2*halo; i++)
+        {
+          int l_y=i+gdim_y*LOCAL_ITEM_PER_THREAD-halo;
+          int l_global_y = (MIN(gbase_y+l_y,width_y-1));
+            l_global_y = (MAX(l_global_y,0));
+            smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + (tid_x-halo) + sm_base_x]=
+                src[l_global_z*width_x*width_y+l_global_y*width_x+
+                MAX((gbase_x+tid_x-halo),0)];
+          if(tid_x<halo*2)
+          {
+              smbuffer_buffer_ptr[l_z+SM_BASE_Z][sm_width_x*(l_y+sm_base_y) + tid_x + tile_x-halo+sm_base_x]=
+                  src[l_global_z*width_x*width_y+l_global_y*width_x+
+                    MIN(gbase_x+tid_x-halo+tile_x,width_x-1)];
+          }
+        }
+      }
+    }
+  }
+  if(sync)
+  {
+    __syncthreads();
+  }
+}
+
 __device__ void __forceinline__ pipesync()
 {
   #ifdef ASYNCSM
