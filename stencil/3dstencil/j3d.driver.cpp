@@ -61,45 +61,84 @@ int main(int argc, char** argv) {
   #ifndef REFCHECK
     if(usesmall)
     {
-      if(fp32)
+      while(true)
       {
-        height=
-              j3d_iterative<float>(nullptr,
-                              height, width_y, width_x,
-                              nullptr, 
-                              bdimx, 
-                              blkpsm, 
-                              1, 
-                              useSM,
-                              false, 
-                              0,
-                              isDoubleTile,
-                              true);
-
-      }
-      else 
-      {
-        height=
-              j3d_iterative<double>(nullptr,
-                              height, width_y, width_x,
-                              nullptr, 
-                              bdimx, 
-                              blkpsm, 
-                              1, 
-                              useSM,
-                              false, 
-                              0,
-                              isDoubleTile,
-                              true);
-      }
-
-      if(height==0)
-      {
-        if(check)
+        int err;
+        if(fp32)
         {
-          printf("error unsupport no cache version small code\n");
+          err=
+                j3d_iterative<float>(nullptr,
+                                height, width_y, width_x,
+                                nullptr, 
+                                bdimx, 
+                                blkpsm, 
+                                1, 
+                                useSM,
+                                false, 
+                                0,
+                                isDoubleTile,
+                                true);
+          if(err>0)
+          { 
+            height=err;
+            break;
+          }
+
         }
-        return 0;
+        else 
+        {
+          err=
+                j3d_iterative<double>(nullptr,
+                                height, width_y, width_x,
+                                nullptr, 
+                                bdimx, 
+                                blkpsm, 
+                                1, 
+                                useSM,
+                                false, 
+                                0,
+                                isDoubleTile,
+                                true);
+          if(err>0)
+          { 
+            height=err;
+            break;
+          }
+        }
+
+        if(err==0)
+        {
+          if(check)
+          {
+            printf("error unsupport no cache version small code\n");
+          }
+          return 0;
+        }
+        if(err==-2)
+        {
+          if(width_y%3==0)
+          {
+            width_y=width_y/3*2;
+            // printf("sdfsdf");
+          }
+          else if(width_y%5==0)
+          {
+            width_y=width_y/5*2;
+            // printf("sdfasdfsdf");
+          }
+          else 
+          {
+            if(check)
+            {
+              // printf("<%d,%d>\n",height,width_y);
+              printf("error unknow situation\n");
+            }
+            return 0;
+          }
+        }
+
+        // printf("<%d,%d>\n",height,width_y);
+        // break;
       }
       // printf("widis %d\n",width_y);
     }
@@ -139,7 +178,17 @@ int main(int argc, char** argv) {
       int err = j3d_iterative((REAL*)input, height, width_y, width_x, (REAL*)output, bdimx, blkpsm, iteration, useSM,usewarmup, warmupiteration,isDoubleTile);
       if(err==-1)
       {
-        printf("unsupport setting, no free space for cache with shared memory\n");
+        if(check)printf("unsupport setting, no free space for cache with shared memory\n");
+        check=0;
+      }
+      if(err==-2)
+      {
+        if(check)printf("unsupport setting, the width of x and y is not support\n");
+        check=0;
+      }
+      if(err==-3)
+      {
+        if(check)printf("the kernel is inlaunchable\n");
         check=0;
       }
       if(check!=0)
@@ -185,6 +234,16 @@ int main(int argc, char** argv) {
       if(err==-1)
       {
         if(check)printf("unsupport setting, no free space for cache with shared memory\n");
+        check=0;
+      }
+      if(err==-2)
+      {
+        if(check)printf("unsupport setting, the width of x and y is not support\n");
+        check=0;
+      }
+      if(err==-3)
+      {
+        if(check)printf("the kernel is inlaunchable\n");
         check=0;
       }
       if(check!=0)

@@ -139,6 +139,7 @@ int j3d_iterative(REAL * h_input,
   bool isDoubleTile,
   bool getminHeight)
 {
+
   const int LOCAL_ITEM_PER_THREAD=isDoubleTile?ITEM_PER_THREAD*2:ITEM_PER_THREAD;
   global_bdimx=global_bdimx==128?128:256;
   if(isDoubleTile)
@@ -155,11 +156,11 @@ int j3d_iterative(REAL * h_input,
 #ifndef __PRINT__
   printf("sm_count is %d\n",sm_count);
 #endif
-
+  // printf("sm_count is %d\n",sm_count);
   int ptx;
   host_printptx(ptx);
 #ifndef __PRINT__
-  printf("code is run in %d\n",ptx);
+  // printf("code is run in %d\n",ptx);
 #endif
 #ifdef NAIVE
   auto execute_kernel = kernel3d_restrict<REAL,HALO>;
@@ -352,7 +353,7 @@ size_t executeSM=0;
 // #endif
 
 
-
+    // return 0;
 //shared memory related 
 #ifdef USEMAXSM
   int maxSharedMemory;
@@ -393,6 +394,7 @@ size_t executeSM=0;
   int max_sm_flder=0;
 #endif
 
+// printf("asdfjalskdfjaskldjfals;");
 
 #if defined(PERSISTENTTHREAD)
   int numBlocksPerSm_current=100;
@@ -416,13 +418,18 @@ size_t executeSM=0;
   dim3 executeBlockDim=block_dim_3;
   dim3 executeGridDim=grid_dim_3;
 
+  if(numBlocksPerSm_current==0)return -3;
   // printf("plckpersm is %d\n", numBlocksPerSm_current);
+  // printf("<%d,%d,%d>\n",width_x/TILE_X, width_y/TILE_Y, MIN(height, MAX(1,sm_count*numBlocksPerSm_current/(width_x*width_y/TILE_X/TILE_Y))));
   // printf("plckpersm is %f\n", (double)executeSM);
 #endif
+  // printf("<%d,%d>\n",TILE_X,TILE_Y);
+  // return 0;
   int minHeight=0;
 #if defined(GEN)||defined(GENWR)
 
   // 
+  // printf("%d\n",numBlocksPerSm_current);
   int perSMUsable=SharedMemoryUsed/numBlocksPerSm_current;
   int perSMValsRemaind=(perSMUsable-basic_sm_space)/sizeof(REAL);
   int reg_boundary=reg_folder_z*2*HALO*(TILE_Y+TILE_X+2*isBOX);
@@ -430,6 +437,7 @@ size_t executeSM=0;
   // printf(">>%ld,%ld\n",perSMUsable/1024,perSMValsRemaind/1024);
   // printf(">>%ld,%ld\n",(perSMValsRemaind-reg_boundary),(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y));
   // printf(">>%ld\n",(max_sm_flder*(2*HALO*(TILE_Y+TILE_X*2*isBOX)+TILE_X*TILE_Y))*sizeof(REAL)/1024);
+   // return 0;
   if(!useSM)max_sm_flder=0;
   if(useSM&&max_sm_flder==0)return -1;
 
@@ -444,7 +452,11 @@ size_t executeSM=0;
   // printf("smfolder is %ld\n",max_sm_flder);
   // printf("SM is %ld/%ld KB\n",executeSM/1024,SharedMemoryUsed/1024);
 #endif
+
+  if(executeGridDim.x*executeGridDim.y*executeGridDim.z/sm_count==0)return -2;
   // printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
+
+
   if(getminHeight)return (minHeight);
 
   REAL * input;
@@ -547,7 +559,7 @@ if(usewarmup)
       int nowiter=(350+nowwarmup-1)/nowwarmup;
       for(int i=0; i<nowiter; i++)
       {
-        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
+        // cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
       }
   }
   #endif
@@ -589,7 +601,7 @@ if(usewarmup)
   printf("[FORMA] Computation Time(ms) : %lf\n",elapsedTime);
   printf("[FORMA] Speed(GCells/s) : %lf\n",(REAL)iteration*height*width_x*width_y/ elapsedTime/1000/1000);
   printf("[FORMA] Computation(GFLOPS/s) : %lf\n",(REAL)iteration*height*width_x*width_y*(HALO*2+1)*(HALO*2+1)/ elapsedTime/1000/1000);
-  printf("[FORMA] Bandwidht(GB/s) : %lf\n",(REAL)iteration*height*width_x*width_y*sizeof(REAL)*2/ elapsedTime/1000/1000);
+  printf("[FORMA] Bandwidth(GB/s) : %lf\n",(REAL)iteration*height*width_x*width_y*sizeof(REAL)*2/ elapsedTime/1000/1000);
 #if defined(GEN)||defined(GENWR)  
   printf("[FORMA] rfder : %d\n",reg_folder_z);
 #endif

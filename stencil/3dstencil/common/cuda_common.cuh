@@ -274,7 +274,7 @@ __device__ void __forceinline__ global2sm(REAL *src, REAL* smbuffer_buffer_ptr[S
   for(int l_z=0; l_z<SIZE_Z; l_z++)
   {
     int l_global_z = (MAX(gbase_z+l_z+BASE_Z,0));
-    if(!isInit)
+    if(!isInit||halo>=2)
     {
         l_global_z = (MIN(l_global_z,width_z-1));
     }
