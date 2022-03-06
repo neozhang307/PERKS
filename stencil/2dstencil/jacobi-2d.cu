@@ -82,6 +82,7 @@ int getMinWidthY(int width_x, int bdimx, int blkpsm)
   //firstly be able  to get the register info
   int ptx;
   host_printptx(ptx);
+  bdimx=((bdimx==128)?128:256);
 
   int smcount=0;
   if(ptx==700)
@@ -140,6 +141,7 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm, 
 
   int ptx;
   host_printptx(ptx);
+  bdimx=((bdimx==128)?128:256);
 
 #ifdef GEN
   registers=0;
@@ -194,13 +196,13 @@ int getMinWidthY(int width_x, int bdimx, int registers, bool useSM, int blkpsm, 
 
     #ifdef GENWR
       auto execute_kernel = isDoubleTile?
-                    (blkpsm>=2?
+                    (blkpsm*bdimx>=2*256?
                     (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,true>:
                         kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,false>)
                     :
                     (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,true>:
                         kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,false>))
-                    :(blkpsm>=2?
+                    :(blkpsm*bdimx>=2*256?
                     (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
                         kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
                     :
@@ -373,15 +375,16 @@ int jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__,
 // extern "C" void jacobi_iterative(REAL * h_input, int width_y, int width_x, REAL * __var_0__, int iteration){
 /* Host allocation Begin */
  // #define LOCAL_RTILE_Y (RTILE_Y)
+  bdimx=((bdimx==128)?128:256);
 #ifndef NAIVE
   const int LOCAL_RTILE_Y = isDoubleTile?RTILE_Y*2:RTILE_Y;
 #endif
   int ptx;
   host_printptx(ptx);
-  
+  if(blkpsm<=0)blkpsm=100;
 #ifdef GENWR
 int REG_FOLDER_Y=0;
-if(blkpsm>=2)
+if(blkpsm*bdimx>=2*256)
 {
   if(useSM)
   {
@@ -473,13 +476,13 @@ else
 
 #ifdef GENWR
   auto execute_kernel = isDoubleTile?
-                (blkpsm>=2?
+                (blkpsm*bdimx>=2*256?
                 (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,true>:
                     kernel_general_wrapper<REAL,2*RTILE_Y,HALO,128,false>)
                 :
                 (useSM?kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,true>:
                     kernel_general_wrapper<REAL,2*RTILE_Y,HALO,256,false>))
-                :(blkpsm>=2?
+                :(blkpsm*bdimx>=2*256?
                 (useSM?kernel_general_wrapper<REAL,RTILE_Y,HALO,128,true>:
                     kernel_general_wrapper<REAL,RTILE_Y,HALO,128,false>)
                 :
@@ -569,10 +572,10 @@ size_t executeSM = 0;
   dim3 executeBlockDim=block_dim;
   dim3 executeGridDim=grid_dim;
 
-  #ifndef __PRINT__
+  // #ifndef __PRINT__
     printf("blk per sm is %d/%d\n", numBlocksPerSm_current,blkpsm);
     printf("grid is (%d,%d)\n", grid_dim.x, grid_dim.y);
-  #endif
+  // #endif
 
 #endif 
 
@@ -808,7 +811,10 @@ if(usewarmup){
   #ifdef __PRINT__
     printf("%f\t%f\t",elapsedTime,(REAL)iteration*(width_y-2*HALO)*(width_x-2*HALO)/ (elapsedTime/RUNS)/1000/1000);
     #if defined(GEN) || defined(GENWR)
-    printf("%d\t%d\t%d\t%d",REG_FOLDER_Y,max_sm_flder,(int)bdimx*grid_dim.x,(int)(max_sm_flder+REG_FOLDER_Y)*LOCAL_RTILE_Y*grid_dim.y);
+    printf("%d\t%d\t%d\t%d\t",REG_FOLDER_Y,max_sm_flder,(int)bdimx*grid_dim.x,(int)(max_sm_flder+REG_FOLDER_Y)*LOCAL_RTILE_Y*grid_dim.y);
+    #endif
+    #ifndef NAIVE
+      printf("%d\t",LOCAL_RTILE_Y);
     #endif
     printf("\n");
   #else

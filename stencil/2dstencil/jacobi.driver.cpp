@@ -83,8 +83,10 @@ int main(int argc, char  *argv[])
 #ifndef CPUCODE
   if(usesmall)
   {
+    bdimx=((bdimx==128)?128:256);
+
     int registers=256;
-    if(blkpsm>=2)
+    if(blkpsm*bdimx>=2*256)
       registers=128;
     else
       registers=256;
@@ -123,9 +125,10 @@ int main(int argc, char  *argv[])
 
 #ifndef __PRINT__
 {
+  bdimx=((bimx==128)?128:256);
   int registers=256;
-  if(blkpsm==2)registers=128;
-  if(blkpsm==1)registers=256;
+  if(blkpsm*bdimx>=2*256)registers=128;
+  else registers=256;
   // #ifdef GEN
   // registers=0;
   // printf("0\n");
