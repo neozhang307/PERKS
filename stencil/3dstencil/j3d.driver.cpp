@@ -126,17 +126,17 @@ int main(int argc, char** argv) {
             width_y=width_y/5*2;
             // printf("sdfasdfsdf");
           }
-          else 
-          {
-            if(check)
-            {
-              // printf("<%d,%d>\n",height,width_y);
-              printf("error unknow situation\n");
-            }
-            return 0;
-          }
-        }
 
+        }
+        else 
+        {
+          if(check)
+          {
+            // printf("<%d,%d>\n",height,width_y);
+            printf("error unknow situation\n");
+          }
+          return 0;
+        }
         // printf("<%d,%d>\n",height,width_y);
         // break;
       }
@@ -191,10 +191,21 @@ int main(int argc, char** argv) {
         if(check)printf("the kernel is inlaunchable\n");
         check=0;
       }
+      if(err==-4)
+      {
+        if(check)printf("the height is too small\n");
+        check=0;
+      }
+      if(err==-5)
+      {
+        if(check)printf("spilled kernel not run to save time\n");
+        check=0;
+      }
       if(check!=0)
       {
         j3d_gold_iterative((REAL*)input, height, width_y, width_x, (REAL*)output_gold,iteration);  
       }
+
 
     #endif
       if(check!=0){
@@ -244,6 +255,16 @@ int main(int argc, char** argv) {
       if(err==-3)
       {
         if(check)printf("the kernel is inlaunchable\n");
+        check=0;
+      }
+      if(err==-4)
+      {
+        if(check)printf("the height is too small\n");
+        check=0;
+      }
+      if(err==-5)
+      {
+        if(check)printf("spilled kernel not run to save time\n");
         check=0;
       }
       if(check!=0)

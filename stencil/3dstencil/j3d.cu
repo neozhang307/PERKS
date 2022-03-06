@@ -206,7 +206,128 @@ int j3d_iterative(REAL * h_input,
                             (isDoubleTile?kernel3d_general<REAL,HALO,2*ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,2*ITEM_PER_THREAD>::val,false,256>
                               :kernel3d_general<REAL,HALO,ITEM_PER_THREAD,TILE_X,REG_FOLDER_Z,getminblocks<REAL,1,ITEM_PER_THREAD>::val,false,256>)))
                         ;
-
+  int lreg_folder_z = 0;
+  // if(isDoubleTile)
+  bool ifspill=false;
+  {
+    if(global_bdimx==128)
+    {
+      if(blkpsm>=4)
+      {
+        if(ptx==800)
+        {
+          lreg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,true,REAL>::val:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,true,REAL>::spill:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,false,REAL>::spill;
+        }
+        if(ptx==700)
+        {
+          lreg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,true,REAL>::val:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,true,REAL>::spill:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,false,REAL>::spill;
+        }
+      }
+      else
+      { 
+        if(isDoubleTile)
+        {
+          if(ptx==800)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,false,REAL>::spill;
+          }
+          if(ptx==700)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,false,REAL>::spill;
+          } 
+        }
+        else
+        {
+          if(ptx==800)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,false,REAL>::spill;
+          }
+          if(ptx==700)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,false,REAL>::spill;
+          } 
+        }
+        
+      }
+    }
+    else
+    {
+      if(blkpsm>=2)
+      {
+        if(ptx==800)
+        {
+          lreg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,true,REAL>::val:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,true,REAL>::spill:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,false,REAL>::spill;
+        }
+        if(ptx==700)
+        {
+          lreg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,true,REAL>::val:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,true,REAL>::spill:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,false,REAL>::spill;
+        }
+      }
+      else
+      { 
+        if(isDoubleTile)
+        {
+          if(ptx==800)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,false,REAL>::spill;
+          }
+          if(ptx==700)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,false,REAL>::spill;
+          }  
+        }
+        else
+        {
+          if(ptx==800)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,true,REAL>::val:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,false,REAL>::spill;
+          }
+          if(ptx==700)
+          {
+            lreg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,true,REAL>::val:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill= useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,false,REAL>::spill;
+          }  
+        }
+        
+      }
+    }
+  }
+  if(lreg_folder_z<REG_FOLDER_Z||ifspill)return -5;
 #endif
 
 #ifdef GENWR
@@ -239,6 +360,7 @@ int j3d_iterative(REAL * h_input,
                   ;
   int reg_folder_z = 0;
   // if(isDoubleTile)
+  bool ifspill=false;
   {
     if(global_bdimx==128)
     {
@@ -248,11 +370,15 @@ int j3d_iterative(REAL * h_input,
         {
           reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,true,REAL>::val:
                             regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,true,REAL>::spill:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,800,false,REAL>::spill;
         }
         if(ptx==700)
         {
           reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,true,REAL>::val:
                             regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,true,REAL>::spill:
+                            regfolder<HALO,curshape,128,ITEM_PER_THREAD,128,700,false,REAL>::spill;
         }
       }
       else
@@ -263,11 +389,15 @@ int j3d_iterative(REAL * h_input,
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
                               regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,800,false,REAL>::spill;
           }
           if(ptx==700)
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
                               regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,2*ITEM_PER_THREAD,256,700,false,REAL>::spill;
           } 
         }
         else
@@ -276,11 +406,15 @@ int j3d_iterative(REAL * h_input,
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,true,REAL>::val:
                               regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,800,false,REAL>::spill;
           }
           if(ptx==700)
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,true,REAL>::val:
                               regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,128,ITEM_PER_THREAD,256,700,false,REAL>::spill;
           } 
         }
         
@@ -294,11 +428,15 @@ int j3d_iterative(REAL * h_input,
         {
           reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,true,REAL>::val:
                             regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,true,REAL>::spill:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,800,false,REAL>::spill;
         }
         if(ptx==700)
         {
           reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,true,REAL>::val:
                             regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,false,REAL>::val;
+          ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,true,REAL>::spill:
+                            regfolder<HALO,curshape,256,ITEM_PER_THREAD,128,700,false,REAL>::spill;
         }
       }
       else
@@ -309,11 +447,15 @@ int j3d_iterative(REAL * h_input,
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,true,REAL>::val:
                               regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,800,false,REAL>::spill;
           }
           if(ptx==700)
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,true,REAL>::val:
                               regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,2*ITEM_PER_THREAD,256,700,false,REAL>::spill;
           }  
         }
         else
@@ -322,18 +464,22 @@ int j3d_iterative(REAL * h_input,
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,true,REAL>::val:
                               regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,false,REAL>::val;
+            ifspill=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,800,false,REAL>::spill;
           }
           if(ptx==700)
           {
             reg_folder_z=useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,true,REAL>::val:
                               regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,false,REAL>::val;
+            ifspill= useSM? regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,true,REAL>::spill:
+                              regfolder<HALO,curshape,256,ITEM_PER_THREAD,256,700,false,REAL>::spill;
           }  
         }
         
       }
     }
   }
-
+  if(ifspill)return -5;
 
 
                       
@@ -453,7 +599,10 @@ size_t executeSM=0;
   // printf("SM is %ld/%ld KB\n",executeSM/1024,SharedMemoryUsed/1024);
 #endif
 
-  if(executeGridDim.x*executeGridDim.y*executeGridDim.z/sm_count==0)return -2;
+  if(executeGridDim.x*executeGridDim.y*executeGridDim.z<sm_count)return -2;
+  if(executeGridDim.z*(2*HALO+1)>=height)return -4;
+  // if(max_sm_flder+reg_folder_z<2*halo)return -4;
+  
   // printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);
 
 
@@ -559,7 +708,7 @@ if(usewarmup)
       int nowiter=(350+nowwarmup-1)/nowwarmup;
       for(int i=0; i<nowiter; i++)
       {
-        // cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
+        cudaLaunchCooperativeKernel((void*)execute_kernel, executeGridDim, executeBlockDim, KernelArgsNULL, executeSM,0);
       }
   }
   #endif

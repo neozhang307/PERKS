@@ -33,6 +33,7 @@ def parsedata(shape,arch,register):
 				))
 		print("{")
 		print("\tstatic int const val = {};".format(row[1]["regfd"]))
+		print("\tstatic bool const spill = {};".format("false"))
 		print("};")
 
 
@@ -54,6 +55,7 @@ print("template<int halo, int shape, int bdim, int ipt, int registeramount, int 
 print("struct regfolder")
 print("{")
 print("\tstatic int const val = 0;")
+print("\tstatic bool const spill = true;")
 print("};")
 for larch in archs:
 	for lshape in shapes:
