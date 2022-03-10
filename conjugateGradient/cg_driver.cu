@@ -66,38 +66,45 @@ void myTest(
   ValueT r1;
   ValueT *r, *p, *Ax;
   cudaEvent_t start, stop;
-
+  // printf("----");
+#ifndef __PRINT__
   printf("Starting ...\n");
-
+#endif
   // This will pick the best possible CUDA capable device
 
   if (!deviceProp.managedMemory) {
     // This sample requires being run on a device that supports Unified Memory
+    #ifndef __PRINT__
     fprintf(stderr, "Unified Memory not supported on this device\n");
+    #endif
     exit(EXIT_WAIVED);
   }
-
+  // printf("----");
   // This sample requires being run on a device that supports Cooperative Kernel
   // Launch
   if (!deviceProp.cooperativeLaunch) {
+    #ifndef __PRINT__
     printf(
         "\nSelected GPU (%d) does not support Cooperative Kernel Launch, "
         "Waiving the run\n",
         devID);
+    #endif
     exit(EXIT_WAIVED);
   }
 
   // Statistics about the GPU device
+  #ifndef __PRINT__
   printf(
       "> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
       deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
-
+  #endif
+  // printf("----");
   /* Generate a random tridiagonal symmetric matrix in CSR format */
 #ifdef USEVDATA
   N = 1048576;//*8;
   nz = (N - 2) * 3 + 4;
   int                 max_iter   = N;
-  std::string         mtx_filename;
+  std::string         mtx_filename="";
 #else
 
   std::string         mtx_filename;
@@ -119,9 +126,10 @@ void myTest(
   coo_matrix.InitMarket(mtx_filename, 1.0, !g_quiet);
 
   max_iter= (max_iter==-1?coo_matrix.num_rows*10:max_iter);
+#ifndef __PRINT__
   printf("maxiter is %d\n",max_iter);
-  // coo_matrix.InitMarket("/home/Lingqi/workspace/merge_spmv/perk_cg/data/bmwcra_1/bmwcra_1.mtx", 1.0, !g_quiet);
   printf("<%d,%d>\n",coo_matrix.num_rows,coo_matrix.num_nonzeros);
+#endif
   CsrMatrix<ValueT, OffsetT> csr_matrix(coo_matrix);
   N=coo_matrix.num_rows;
   nz=coo_matrix.num_nonzeros;
@@ -129,7 +137,7 @@ void myTest(
   cudaMallocManaged(reinterpret_cast<void **>(&I), sizeof(OffsetT) * (N + 1));
   cudaMallocManaged(reinterpret_cast<void **>(&J), sizeof(OffsetT) * nz);
   cudaMallocManaged(reinterpret_cast<void **>(&val), sizeof(ValueT) * nz);
-
+  // printf("----");
 #ifndef USEVDATA
   cudaMemcpy(val, csr_matrix.values, nz*sizeof(ValueT), cudaMemcpyHostToDevice);
   cudaMemcpy(I, csr_matrix.row_offsets, (N+1)*sizeof(int), cudaMemcpyHostToDevice);
@@ -222,26 +230,6 @@ void myTest(
   void *d_temp_storage = NULL;
 
 
-    // REAL l2perused;
-    size_t inner_window_size = N*sizeof(ValueT);//30*1024*1024;
-    cudaStreamAttrValue stream_attribute;
-    stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(p);                  // Global Memory data pointer
-    stream_attribute.accessPolicyWindow.num_bytes = inner_window_size;                                   // Number of bytes for persistence access
-    stream_attribute.accessPolicyWindow.hitRatio  = 1;                                             // Hint for cache hit ratio
-    stream_attribute.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting;                  // Persistence Property
-    stream_attribute.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;  
-
-    cudaStreamSetAttribute(0, cudaStreamAttributeAccessPolicyWindow, &stream_attribute); 
-    cudaCtxResetPersistingL2Cache();
-    cudaStreamSynchronize(0);
-
-  // mycsrMatrix.num_rows=N;
-  // mycsrMatrix.num_cols=N;
-  // mycsrMatrix.num_nonzeros=nz;
-  // mycsrMatrix.row_offsets=I;
-  // mycsrMatrix.column_indices=J;
-  // mycsrMatrix.values=val;
-
   // // Get amount of temporary storage needed
     CubDebugExit(
         (DispatchCG<ValueT,OffsetT>::InitDispatch(
@@ -250,8 +238,9 @@ void myTest(
             params,
             0, false))
         );
+#ifndef __PRINT__
     printf("temp size is %lu\n",temp_storage_bytes);
-
+#endif
     // // Warmup
   // Allocate
     CubDebugExit(g_allocator.DeviceAllocate(&d_temp_storage, temp_storage_bytes));
@@ -268,7 +257,7 @@ void myTest(
      cgParamsT.max_iter              =  max_iter;//*10;//10000;//N;//10000;//57356;//31994;//N;//57356;//31994;//N;//10000;//N;//N;//10000;//N;//10000;//N;//1000;//N;//10000;//57356;//N;
 
   checkCudaErrors(cudaEventRecord(start, 0));
-
+  // printf("----");
 
   DispatchCG<ValueT,OffsetT>::ProcessDispatchCG(smParamsT,cgParamsT, 
                                         d_temp_storage, temp_storage_bytes,params);
@@ -278,36 +267,32 @@ void myTest(
 
   float time;
   checkCudaErrors(cudaEventElapsedTime(&time, start, stop));
-
+  // printf("----");
   r1 = *dot_result;
   unsigned int total_iter;
   cudaMemcpy(&total_iter, cgParamsT.d_iter, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+#ifndef __PRINT__
   printf("GPU Final, residual = %e, kernel execution time = %f ms in %d iteration\n", sqrt(r1),
          time,total_iter);
+#endif
+#ifdef __PRINT__
+  // mtx_filename="nothing";
+  // printf("%shaha\n",mtx_filename.c_str());
+  printf("%s\t",mtx_filename.c_str());
+  printf("%e\t",sqrt(r1));
+  printf("%d\t%d\t",nz, N);
+  printf("%d\t%d\t",cgParamsT.gridDim, 256); //blockdim
+  printf("%d\t%d\t",smParamsT.sm_num_r, smParamsT.sm_blk_size_r);
+  printf("%d\t",total_iter);
 
-  fprintf(stderr,"%s\t"
-    "%e\t"
-    "%d\t%d\t%d\t"
-    "%lu\t"
-    // "%d\t%d\t%d\t%d\t"
-    "%d\t%d\t"
-    "%f\t%d\n",
-        mtx_filename.c_str(),
-        sqrt(r1),
-        nz, N, cgParamsT.gridDim,
-        smParamsT.sMemSizeTemptTotal,
-        // smParamsT.sm_size_total_coor, 
-        // smParamsT.sm_size_total_thread_coor, 
-        // smParamsT.sm_size_total_vals, 
-        // smParamsT.sm_size_total_cols, 
-        smParamsT.sm_num_r, 
-        smParamsT.sm_blk_size_r, 
-
-        time, total_iter);
+  size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);
+  printf("%f\t%f\t\n",time/total_iter,(double)totalaccess/time*total_iter*1000/1024/1024/1024);
+#endif
+#ifndef __PRINT__
   size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);
   printf("<%f ms: %fGB/s>\n",time/total_iter,(double)totalaccess/time*total_iter*1000/1024/1024/1024);
-  
-
+#endif
+//need to print
 #if ENABLE_CPU_DEBUG_CODE
   cpuConjugateGrad(I, J, val, x_cpu, Ax_cpu, p_cpu, r_cpu, nz, N, tol);
 #endif
@@ -352,10 +337,13 @@ void myTest(
   free(x_cpu);
 #endif
 
+#ifndef __PRINT__
   printf("Test Summary:  Error amount = %f \n", err);
   fprintf(stdout, "&&&& conjugateGradientMultiBlockCG %s\n",
           (sqrt(r1) < tol) ? "PASSED" : "FAILED");
+#endif
 }
 
 
 template void myTest<float,int>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
