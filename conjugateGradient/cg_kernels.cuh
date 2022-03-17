@@ -630,12 +630,13 @@ template <
     // typename    PairsInputIteratorT,            ///< Random-access input iterator type for keys
     typename    AggregatesOutputIteratorT,
     bool isBaseline=true,
-    bool cacheMatrix=true,
-    bool cacheVector=true 
+    bool cacheMatrix=false,
+    bool cacheVector=false 
     >//,      ///< Random-access output iterator type for values
     // typename    OffsetT,                        ///< Signed integer type for global offsets
             // typename    ScanTileStateT>                 ///< Tile status interface type
-__launch_bounds__(256,2)
+// __launch_bounds__(256,2)
+__launch_bounds__(128,5)
 __global__ void gpuConjugateGradient_cub
 (
     SpmvParams<ValueT, OffsetT>     spmv_params,                ///< [in] SpMV input parameter bundle
@@ -727,7 +728,7 @@ __global__ void gpuConjugateGradient_cub
         {
             for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
             {
-                AgentSpmvT(temp_storage[0], spmv_params).ConsumeTile(
+                AgentSpmvT(temp_storage[0], spmv_params).ConsumeTilePERKS(
                     // tile_idx,
                     d_tile_coordinates,
                     d_tile_carry_pairs,
@@ -834,8 +835,9 @@ __global__ void gpuConjugateGradient_cub
     r1 = *dot_result;
 
     int k = 1;
-    while (r1 > tol * tol && k <= max_iter) {
-    // while (k <= 100) {
+    // while (r1 > tol * tol && k <= max_iter) {
+    while (k <= max_iter) {
+      // printf("%d");
             if (k > 1) {
                 b = r1 / r0;
                 //v(r)+p(p)->v(p)
@@ -878,7 +880,7 @@ __global__ void gpuConjugateGradient_cub
             {
                 for(int tile_idx=blockIdx.x; tile_idx<num_merge_tiles; tile_idx+=gridDim.x)
                 {
-                    AgentSpmvT(temp_storage[0], spmv_params).ConsumeTile(
+                    AgentSpmvT(temp_storage[0], spmv_params).ConsumeTilePERKS(
                         // tile_idx,
                         d_tile_coordinates,
                         d_tile_carry_pairs,
@@ -930,7 +932,7 @@ __global__ void gpuConjugateGradient_cub
 
         a = r1 / *(dot_result+1);
         //v(p)+v(x)->v(x)
-        // gpuSaxpy_cub(p, x, a, N, grid);
+        gpuSaxpy_cub(p, x, a, N, grid);
         na = -a;
         //v(Ax)+v(r)->v(na)
         // 
@@ -974,8 +976,8 @@ __global__ void gpuConjugateGradient_cub
         k++;
         // if(threadIdx.x==0&&blockIdx.x==0)printf("<%e>",r1);
     }
-    gpuSaxpy_cub(p, x, a, N, grid);
-    if(threadIdx.x==0&&blockIdx.x==0)iteration[0]=k;
+    // gpuSaxpy_cub(p, x, a, N, grid);
+    if(threadIdx.x==0&&blockIdx.x==0)iteration[0]=k-1;
     if(cacheVector)
     {
         gpuCopyVector_perk_reg(

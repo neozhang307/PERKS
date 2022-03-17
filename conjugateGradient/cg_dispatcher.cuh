@@ -45,8 +45,9 @@
 
 #include "cub/device/device_spmv.cuh"
 
-#define THREADS_PER_BLOCK 256
-
+// #define THREADS_PER_BLOCK 256
+#define THREADS_PER_BLOCK 128
+// 
 // #define THREADS_PER_BLOCK 128
 // #define REG (3)
 #define MAXITER (10000)
@@ -78,7 +79,10 @@ CUB_NS_PREFIX
 */
 template <
     typename    ValueT,                     ///< Matrix and vector value type
-    typename    OffsetT>                    ///< Signed integer type for global offsets
+    typename    OffsetT,                    ///< Signed integer type for global offsets
+    bool isbaseline=true,
+    bool cacheMatrix=false,
+    bool cacheVector=false>
 struct DispatchCG
 {
         //---------------------------------------------------------------------
@@ -583,16 +587,18 @@ struct DispatchCG
                 auto spmv_kernel=DeviceSpmvKernel<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false>;
                 auto segment_fixup_kernel=DeviceSegmentFixupKernel<PtxSegmentFixupPolicy, KeyValuePairT*, ValueT*, OffsetT, ScanTileStateT>;
 //baseline
-#ifdef NOCOO
-                auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*, true>;  
-#else
+// #ifdef NOCOO
+                // auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*, true>;  
+// #else
                 auto perk_cg_kernel = gpuConjugateGradient_cub
                         <PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, 
                         false, false, PtxSegmentFixupPolicy, ValueT*, 
-                        false,true,false>;  
-#endif
-                bool cacheMatrix=true;
-                bool cacheVector=false;
+                        isbaseline,cacheMatrix,cacheVector>;  
+                        // isbaseline,cacheMatrix,cacheVector>;  
+// #endif
+                // bool cacheMatrix=cacheMatrix;
+                // bool cacheVector=false;
+                // bool cacheVector=cacheVector;
 
                 using std::is_same;
                 size_t unchangeableTempt=0;//max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));
@@ -603,7 +609,7 @@ struct DispatchCG
                 if(is_same<ValueT, float>::value) { 
                   // printf("is float\n");
                   typedef AgentSpmv<
-                        DispatchCG<float,int>::PtxPolicy::SpmvPolicyT,
+                        DispatchCG<float,int,true,false,false>::PtxPolicy::SpmvPolicyT,
                         // PtxSpmvPolicyT,
                         // PtxSpmvPolicyT,
                         float,
@@ -613,7 +619,7 @@ struct DispatchCG
                     AgentSpmvT;
                     // typedef 
                     typedef AgentSegmentFixup<
-                                    DispatchCG<float,int>::PtxPolicy::SegmentFixupPolicyT,
+                                    DispatchCG<float,int,true,false,false>::PtxPolicy::SegmentFixupPolicyT,
                                     // PtxSegmentFixupPolicy,
                                     // PtxSegmentFixupPolicy,
                                     KeyValuePair<int,float>*,
@@ -633,7 +639,7 @@ struct DispatchCG
                 {
                    // printf("is double\n");
                    typedef AgentSpmv<
-                        DispatchCG<double,int>::PtxPolicy::SpmvPolicyT,
+                        DispatchCG<double,int,true,false,false>::PtxPolicy::SpmvPolicyT,
                         // PtxSpmvPolicyT,
                         // PtxSpmvPolicyT,
                         double,
@@ -643,7 +649,7 @@ struct DispatchCG
                     AgentSpmvT;
                     // typedef 
                     typedef AgentSegmentFixup<
-                                    DispatchCG<double,int>::PtxPolicy::SegmentFixupPolicyT,
+                                    DispatchCG<double,int,true,false,false>::PtxPolicy::SegmentFixupPolicyT,
                                     // PtxSegmentFixupPolicy,
                                     // PtxSegmentFixupPolicy,
                                     KeyValuePair<int,double>*,
@@ -681,47 +687,69 @@ struct DispatchCG
                 
                 int maxSharedMemory;
                 cudaDeviceGetAttribute (&maxSharedMemory, cudaDevAttrMaxSharedMemoryPerMultiprocessor,0 );
-                int SharedMemoryUsed=maxSharedMemory-2048;
-                
-                cudaFuncSetAttribute(perk_cg_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
-                #ifndef __PRINT__
-                    printf("current max shared memory is %d\n", SharedMemoryUsed);
-                #endif
-                checkCudaErrors(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                    &numBlocksPerSm, perk_cg_kernel, numThreads, launcableTmep));
 
-                numBlocksPerSm=min(numBlocksPerSm,2);
-                dim3 dimGrid(numSms * numBlocksPerSm, 1, 1);
-                #ifndef __PRINT__
-                    printf("<%dX%d>\n",numBlocksPerSm*numSms,THREADS_PER_BLOCK);
-                #endif
-                
-                OffsetT sMemSizeUsable=SharedMemoryUsed/numBlocksPerSm;//- unchangeableTempt;//(sizeof(AgentSpmvT::TempStorage)+sizeof(AgentSegmentFixupT::TempStorage))*3;;//unchangeableTempt;
+                int assumBlkPerSm=5;
 
-                #ifdef NOCOO
-                    OffsetT sm_coor= 0;//2*cub::DivideAndRoundUp(blk_num_merge_tiles+1,dimGrid.x);
-                #else
-                    OffsetT sm_coor= 2*cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x);
-                    // printf("<<<%d,%d,%d>>>\n",blk_num_merge_tiles,dimGrid.x,sm_coor);
-                #endif                
-                OffsetT sm_size_coor = sm_coor*sizeof(CoordinateT);
-                // printf("%d/%d=%d\n", blk_num_merge_tiles,dimGrid.x,sm_coor);
-                OffsetT sMemSizeRmained=sMemSizeUsable-sMemSizeTempt-sm_size_coor;
-                // OffsetT MatrixUnitSize =  (spmv_config.items_per_thread*(sizeof(ValueT)+sizeof(OffsetT))+sizeof(CoordinateT))*THREADS_PER_BLOCK;
-                OffsetT smBlkMatrixNumPreffered=cacheMatrix? cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x):0;
-                // blk_num_merge_tiles;
-                OffsetT smBlkMatrixUnitNum=sMemSizeRmained/MatrixUnitSize;
-                smBlkMatrixUnitNum=min(smBlkMatrixNumPreffered,smBlkMatrixUnitNum);
-                OffsetT smBlkMatrixTotalSize = smBlkMatrixUnitNum*MatrixUnitSize;
+                int SharedMemoryUsed = maxSharedMemory;
+                OffsetT sm_size_coor = 0;
+                OffsetT sm_coor = 0;
+                OffsetT smBlkMatrixUnitNum = 0;
+                OffsetT sm_num_r = 0;
+                OffsetT sm_blk_size_r= 0;
+                while(true)
+                {
+                    cudaFuncSetAttribute(perk_cg_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedMemoryUsed);
+                    // #ifndef __PRINT__
+                        printf("current max shared memory is %d\n", SharedMemoryUsed);
+                    // #endif
+                    checkCudaErrors(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &numBlocksPerSm, perk_cg_kernel, numThreads, sMemSizeTempt+sizeof(CoordinateT)* 2*cub::DivideAndRoundUp(blk_num_merge_tiles,assumBlkPerSm*numSms)));
 
-                sMemSize=sMemSizeTempt+sm_size_coor+smBlkMatrixTotalSize;
+                    dim3 dimGrid(numSms * numBlocksPerSm, 1, 1);
+                    // #ifndef __PRINT__
+                    printf("<%dX%d>\n",numBlocksPerSm*numSms,numThreads);
+                    if(numBlocksPerSm!=assumBlkPerSm)
+                    {
+                        assumBlkPerSm=numBlocksPerSm ;
+                        printf("0 current blkpsm is %d\n",assumBlkPerSm);
+                        continue;
+                    }
+                    // #endif
+                    
+                    OffsetT sMemSizeUsable=SharedMemoryUsed/numBlocksPerSm;//- unchangeableTempt;//(sizeof(AgentSpmvT::TempStorage)+sizeof(AgentSegmentFixupT::TempStorage))*3;;//unchangeableTempt;
 
-                OffsetT sm_num_r_remained=MAX(sMemSizeUsable-sMemSize,0)/sizeof(ValueT)/(THREADS_PER_BLOCK);
-                OffsetT sm_num_r_preffered = cacheVector? cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK:0;
-                OffsetT sm_num_r = MIN(sm_num_r_preffered,sm_num_r_remained);
-                OffsetT sm_blk_size_r = sm_num_r*sizeof(ValueT)*spmv_config.block_threads;
-                sMemSize=sMemSizeTempt+sm_size_coor+smBlkMatrixTotalSize+sm_blk_size_r;
-                // sMemSize=sMemSizeTempt+sm_size_coor+smBlkMatrixTotalSize+sm_blk_size_r;
+                    sm_coor=isbaseline?0: 2*cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x);
+                 
+                    sm_size_coor = sm_coor*sizeof(CoordinateT);
+
+                    OffsetT sm_num_r_remained=MAX(sMemSizeUsable-sMemSizeTempt-sm_size_coor,0)/sizeof(ValueT)/(THREADS_PER_BLOCK);
+                    OffsetT sm_num_r_preffered = cacheVector? cgParamsT.N/numBlocksPerSm/numSms/THREADS_PER_BLOCK:0;
+                    sm_num_r = MIN(sm_num_r_preffered,sm_num_r_remained);
+                    sm_blk_size_r = sm_num_r*sizeof(ValueT)*spmv_config.block_threads;
+                    sMemSize=sMemSizeTempt+sm_size_coor+sm_blk_size_r;
+
+                    OffsetT sMemSizeRmained=sMemSizeUsable-sMemSize;//sMemSizeTempt-sm_size_coor;
+                    OffsetT smBlkMatrixNumPreffered=cacheMatrix? cub::DivideAndRoundUp(blk_num_merge_tiles,dimGrid.x):0;
+                    smBlkMatrixUnitNum=sMemSizeRmained/MatrixUnitSize;
+                    smBlkMatrixUnitNum=min(smBlkMatrixNumPreffered,smBlkMatrixUnitNum);
+                    OffsetT smBlkMatrixTotalSize = smBlkMatrixUnitNum*MatrixUnitSize;
+
+                    sMemSize=sMemSizeTempt+sm_size_coor+smBlkMatrixTotalSize+sm_blk_size_r;
+                    //check if can break;
+                    checkCudaErrors(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &numBlocksPerSm, perk_cg_kernel, numThreads, sMemSize));
+                    if(numBlocksPerSm!=assumBlkPerSm)
+                    {
+                        assumBlkPerSm=numBlocksPerSm;
+                        printf("1 current blkpsm is %d\n",assumBlkPerSm);
+                        SharedMemoryUsed-=1024;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                dim3 dimGrid(numSms * assumBlkPerSm, 1, 1);
                 #ifndef __PRINT__
                     printf("%d,%d,%ld()()()\n",sm_blk_size_r, sm_num_r, sMemSize);
                     printf("[%d,%d:%d\\%d]\n",smBlkMatrixTotalSize, sm_blk_size_r,(int)sMemSize,sMemSizeUsable);
@@ -866,15 +894,16 @@ struct DispatchCG
                         int numThreads = THREADS_PER_BLOCK;
                         int numSms = deviceProp.multiProcessorCount;
                         
-                        cudaFuncSetAttribute(perk_cg_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,  sMemSize);
+                        // cudaFuncSetAttribute(perk_cg_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,  sMemSize);
                         checkCudaErrors(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                             &numBlocksPerSm, perk_cg_kernel, numThreads, sMemSize));
+                        // printf("<%dX%d>\n",numBlocksPerSm*numSms,numThreads);
                         dim3 dimGrid(numSms * numBlocksPerSm, 1, 1),
                         dimBlock(THREADS_PER_BLOCK, 1, 1);
                         cgParamsT.gridDim =dimGrid.x;
 
 
-                        // fprintf(stderr,"%dX%d\t",numBlocksPerSm,numThreads);
+                        printf("%dX%d\t",numBlocksPerSm,numThreads);
                         
                         error=(cudaLaunchCooperativeKernel(
                             (void *)perk_cg_kernel,

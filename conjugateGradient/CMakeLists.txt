@@ -10,9 +10,8 @@ project(${projectname} CUDA CXX)
 set (CMAKE_CXX_STANDARD 14)
 
 # set(DEFAULT_COMPILER_FLAG "--std=c++14 -Xptxas \"-v -dlcm=cg\"")
-#set(DEFAULT_COMPILER_FLAG "--std=c++14")
-
-set(DEFAULT_COMPILER_FLAG "--std=c++14 -Xptxas \"-v -dlcm=cg\"")
+set(DEFAULT_COMPILER_FLAG "--std=c++14")
+# set(DEFAULT_COMPILER_FLAG "--std=c++14 -Xptxas \"-v -dlcm=cg\"")
 set(archlist " -gencode arch=compute_80,code=sm_80 ")
 string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
 
@@ -91,6 +90,7 @@ function(subcompile prefix compilerflag aim)
     target_link_libraries(${local_goal} PUBLIC ${libraryname})
 endfunction()
 
-subcompile("cg" "${DEFAULT_COMPILER_FLAG}  -DBASELINE,NOCOO,__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/main.cu" DRIVER "${CMAKE_SOURCE_DIR}/cg_driver.cu" LIB "tridiag" "cg_cpu" "cub_utils" "timer" )
+# subcompile("cg" "${DEFAULT_COMPILER_FLAG}  -DBASELINE,NOCOO,__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/main.cu" DRIVER "${CMAKE_SOURCE_DIR}/cg_driver.cu" LIB "tridiag" "cg_cpu" "cub_utils" "timer" )
+subcompile("cg" "${DEFAULT_COMPILER_FLAG}  -D__PRINT__" "PERKS" SOURCE "${CMAKE_SOURCE_DIR}/main.cu" DRIVER "${CMAKE_SOURCE_DIR}/cg_driver.cu" LIB "tridiag" "cg_cpu" "cub_utils" "timer" )
 
 

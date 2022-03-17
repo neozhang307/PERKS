@@ -52,15 +52,19 @@ CachingDeviceAllocator  g_allocator(true);          // Caching allocator for dev
 
 template <
     typename ValueT,
-    typename OffsetT>
+    typename OffsetT,
+    bool baseline,
+    bool cacheMatrix,
+    bool cacheVector>
 void myTest(
   int devID,
   cudaDeviceProp& deviceProp,
   CommandLineArgs& args){
   int N = 0, nz = 0, *I = NULL, *J = NULL;
   ValueT *val = NULL;
-  // const ValueT tol = 1e-10f;
-  const ValueT tol = 1e-11f;
+  const ValueT tol = 1e-10f;
+  // const ValueT tol = 1e-200f;
+  // const ValueT tol = 0;
   ValueT *x;
   ValueT *rhs;
   ValueT r1;
@@ -79,8 +83,6 @@ void myTest(
     #endif
     exit(EXIT_WAIVED);
   }
-  // printf("----");
-  // This sample requires being run on a device that supports Cooperative Kernel
   // Launch
   if (!deviceProp.cooperativeLaunch) {
     #ifndef __PRINT__
@@ -98,64 +100,81 @@ void myTest(
       "> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
       deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
   #endif
-  // printf("----");
-  /* Generate a random tridiagonal symmetric matrix in CSR format */
-#ifdef USEVDATA
-  N = 1048576;//*8;
-  nz = (N - 2) * 3 + 4;
-  int                 max_iter   = N;
-  std::string         mtx_filename="";
-#else
 
   std::string         mtx_filename;
-  args.GetCmdLineArgument("mtx", mtx_filename);
+  bool usevdata=false;
+  
+  // bool baseline=true;
+  // bool usecoo=false;
+  // bool cachematrix=false;
+  // bool cachevector=false;
 
-  if(mtx_filename=="")
-  {
-      mtx_filename="/home/Lingqi/workspace/merge_spmv/perk_cg/data/bmwcra_1/bmwcra_1.mtx";
-      // mtx_filename="/home/Lingqi/data/general/fv1/fv1.mtx";
-  }
-  // printf("opening %s\n",mtx_filename.get_ptr());
-  // cout<<"opening "<<mtx_filename;
-  int                 max_iter   = -1;
+  bool warmup=false;
+  int  max_iter   = -1;
+  bool isCheck=false;
+  usevdata = args.CheckCmdLineFlag("vdata");
+  warmup = args.CheckCmdLineFlag("warmup");
+  isCheck = args.CheckCmdLineFlag("check");
+  // baseline = args.CheckCmdLineFlag("baseline");
+  // cachematrix = args.CheckCmdLineFlag("cmat");
+  // cachevector = args.CheckCmdLineFlag("cvec");
+  // if(baseline)
+  // {
+  //   usecoo=false;
+  //   cachematrix=false;
+  //   cachevector=false;
+  // }
+
   args.GetCmdLineArgument("iters", max_iter);
+  // printf("usedata%d\n",usevdata);
+// #ifdef USEVDATA
+  if(usevdata)
+  {
+    N = 1048576;//*8;
+    nz = (N - 2) * 3 + 4;
+    max_iter   = N;
+    mtx_filename="virtualdata";
 
+    cudaMallocManaged(reinterpret_cast<void **>(&I), sizeof(OffsetT) * (N + 1));
+    cudaMallocManaged(reinterpret_cast<void **>(&J), sizeof(OffsetT) * nz);
+    cudaMallocManaged(reinterpret_cast<void **>(&val), sizeof(ValueT) * nz);
 
+    genTridiag(I, J, val, N, nz);
+  }
+  else
+  {
+    args.GetCmdLineArgument("mtx", mtx_filename);
 
-  CooMatrix<ValueT, OffsetT> coo_matrix;
-  coo_matrix.InitMarket(mtx_filename, 1.0, !g_quiet);
+    if(mtx_filename=="")
+    {
+        mtx_filename="/home/Lingqi/data/general/bmwcra_1/bmwcra_1.mtx";
+        
+    }
+    
+    
 
-  max_iter= (max_iter==-1?coo_matrix.num_rows*10:max_iter);
-#ifndef __PRINT__
-  printf("maxiter is %d\n",max_iter);
-  printf("<%d,%d>\n",coo_matrix.num_rows,coo_matrix.num_nonzeros);
-#endif
-  CsrMatrix<ValueT, OffsetT> csr_matrix(coo_matrix);
-  N=coo_matrix.num_rows;
-  nz=coo_matrix.num_nonzeros;
-#endif
-  cudaMallocManaged(reinterpret_cast<void **>(&I), sizeof(OffsetT) * (N + 1));
-  cudaMallocManaged(reinterpret_cast<void **>(&J), sizeof(OffsetT) * nz);
-  cudaMallocManaged(reinterpret_cast<void **>(&val), sizeof(ValueT) * nz);
-  // printf("----");
-#ifndef USEVDATA
-  cudaMemcpy(val, csr_matrix.values, nz*sizeof(ValueT), cudaMemcpyHostToDevice);
-  cudaMemcpy(I, csr_matrix.row_offsets, (N+1)*sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(J, csr_matrix.column_indices, nz*sizeof(int), cudaMemcpyHostToDevice);
-#else
-///////
-  genTridiag(I, J, val, N, nz);
-#endif
+    CooMatrix<ValueT, OffsetT> coo_matrix;
+    coo_matrix.InitMarket(mtx_filename, 1.0, !g_quiet);
+    max_iter= (max_iter<=0?coo_matrix.num_rows*10:max_iter);
+
+    CsrMatrix<ValueT, OffsetT> csr_matrix(coo_matrix);
+    N=coo_matrix.num_rows;
+    nz=coo_matrix.num_nonzeros;
+
+    cudaMallocManaged(reinterpret_cast<void **>(&I), sizeof(OffsetT) * (N + 1));
+    cudaMallocManaged(reinterpret_cast<void **>(&J), sizeof(OffsetT) * nz);
+    cudaMallocManaged(reinterpret_cast<void **>(&val), sizeof(ValueT) * nz);
+
+    cudaMemcpy(val, csr_matrix.values, nz*sizeof(ValueT), cudaMemcpyHostToDevice);
+    cudaMemcpy(I, csr_matrix.row_offsets, (N+1)*sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(J, csr_matrix.column_indices, nz*sizeof(int), cudaMemcpyHostToDevice);   
+  }
 
   cudaMallocManaged(reinterpret_cast<void **>(&x), sizeof(ValueT) * N);
- 
   cudaMallocManaged(reinterpret_cast<void **>(&rhs), sizeof(ValueT) * N);
-
   double *dot_result;
   cudaMallocManaged(reinterpret_cast<void **>(&dot_result), sizeof(double)*2);
-
   *dot_result = 0.0;
-
   // temp memory for CG
   checkCudaErrors(
       cudaMallocManaged(reinterpret_cast<void **>(&r), N * sizeof(ValueT)));
@@ -232,7 +251,7 @@ void myTest(
 
   // // Get amount of temporary storage needed
     CubDebugExit(
-        (DispatchCG<ValueT,OffsetT>::InitDispatch(
+        (DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::InitDispatch(
             d_temp_storage,
             temp_storage_bytes,
             params,
@@ -243,23 +262,44 @@ void myTest(
 #endif
     // // Warmup
   // Allocate
-    CubDebugExit(g_allocator.DeviceAllocate(&d_temp_storage, temp_storage_bytes));
+  CubDebugExit(g_allocator.DeviceAllocate(&d_temp_storage, temp_storage_bytes));
 
 
 
     // Reset input/output vector y
-    CubDebugExit(cudaMemcpy(params.d_vector_y, p, sizeof(ValueT) * params.num_rows, cudaMemcpyHostToDevice));
-    SMCacheParams<OffsetT,size_t> smParamsT;
-    // Warmup
-     DispatchCG<ValueT,OffsetT>::ProcessDispatchCG(smParamsT,cgParamsT, 
-                                        d_temp_storage, temp_storage_bytes,params);
-  
-     cgParamsT.max_iter              =  max_iter;//*10;//10000;//N;//10000;//57356;//31994;//N;//57356;//31994;//N;//10000;//N;//N;//10000;//N;//10000;//N;//1000;//N;//10000;//57356;//N;
+  CubDebugExit(cudaMemcpy(params.d_vector_y, p, sizeof(ValueT) * params.num_rows, cudaMemcpyHostToDevice));
+  SMCacheParams<OffsetT,size_t> smParamsT;
+  // Warmup
+  if(warmup)
+  {
+    printf("warmup start\n");
+    cudaEvent_t warmup_start, warmup_stop;
+    checkCudaErrors(cudaEventCreate(&warmup_start));
+    checkCudaErrors(cudaEventCreate(&warmup_stop));
+    checkCudaErrors(cudaEventRecord(warmup_start, 0));
+    DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
+                                        d_temp_storage, temp_storage_bytes,params);    
+    checkCudaErrors(cudaEventRecord(warmup_stop, 0));
+    checkCudaErrors(cudaDeviceSynchronize());
+    float time;
+    checkCudaErrors(cudaEventElapsedTime(&time, warmup_start, warmup_stop));
+    cgParamsT.max_iter              =max(1, (int) (2*350/time));
+    DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
+                                        d_temp_storage, temp_storage_bytes,params);        
+    checkCudaErrors(cudaDeviceSynchronize());
 
+    checkCudaErrors(cudaEventDestroy(warmup_start));
+    checkCudaErrors(cudaEventDestroy(warmup_stop));
+    printf("finished warmup \n");
+  }
+
+  
+  cgParamsT.max_iter              =  max_iter;//*10;//10000;//N;//10000;//57356;//31994;//N;//57356;//31994;//N;//10000;//N;//N;//10000;//N;//10000;//N;//1000;//N;//10000;//57356;//N;
+  printf("max iter is %u\n",cgParamsT.max_iter );
   checkCudaErrors(cudaEventRecord(start, 0));
   // printf("----");
 
-  DispatchCG<ValueT,OffsetT>::ProcessDispatchCG(smParamsT,cgParamsT, 
+  DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
                                         d_temp_storage, temp_storage_bytes,params);
   
   checkCudaErrors(cudaEventRecord(stop, 0));
@@ -275,23 +315,52 @@ void myTest(
   printf("GPU Final, residual = %e, kernel execution time = %f ms in %d iteration\n", sqrt(r1),
          time,total_iter);
 #endif
-#ifdef __PRINT__
+  printf("max iter is %d\n",max_iter);
+// #ifdef __PRINT__
   // mtx_filename="nothing";
   // printf("%shaha\n",mtx_filename.c_str());
   printf("%s\t",mtx_filename.c_str());
-  printf("%e\t",sqrt(r1));
-  printf("%d\t%d\t",nz, N);
-  printf("%d\t%d\t",cgParamsT.gridDim, 256); //blockdim
-  printf("%d\t%d\t",smParamsT.sm_num_r, smParamsT.sm_blk_size_r);
-  printf("%d\t",total_iter);
-
-  size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);
-  printf("%f\t%f\t\n",time/total_iter,(double)totalaccess/time*total_iter*1000/1024/1024/1024);
-#endif
-#ifndef __PRINT__
-  size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);
-  printf("<%f ms: %fGB/s>\n",time/total_iter,(double)totalaccess/time*total_iter*1000/1024/1024/1024);
-#endif
+  fprintf(stderr,"%s\t",mtx_filename.c_str());
+  fprintf(stderr,"%d\t",sizeof(ValueT)/4);
+  if(baseline)
+  {
+    fprintf(stderr,"bsln\t");
+  }
+  else if(cacheMatrix&&cacheVector)
+  {
+    fprintf(stderr,"mix\t");
+  }
+  else if(!cacheMatrix&&!cacheVector)
+  {
+    fprintf(stderr,"coo\t");
+  }
+  else if(!cacheMatrix&&cacheVector)
+  {
+    fprintf(stderr,"cvec\t");
+  }
+  else if(cacheMatrix&&!cacheVector)
+  {
+    fprintf(stderr,"cmat\t");
+  }
+  fprintf(stderr,"%e\t",sqrt(r1));
+  
+  fprintf(stderr,"%d\t%d\t",nz, N);
+  fprintf(stderr,"%d\t%d\t",cgParamsT.gridDim, THREADS_PER_BLOCK); //blockdim
+  fprintf(stderr,"%d\t%d\t",smParamsT.sm_num_r, smParamsT.sm_num_matrixperblk);
+  fprintf(stderr,"%f\t",(double)(nz*(sizeof(ValueT)+sizeof(OffsetT))+N*sizeof(ValueT)+N*sizeof(OffsetT))/1024/1024);
+  fprintf(stderr,"%f\t%f\t%f\t",(double)smParamsT.sm_size_coor/1024, (double)smParamsT.sm_blk_size_r/1024, (double)smParamsT.sm_size_unit_matrix*smParamsT.sm_num_matrixperblk/1024);
+  fprintf(stderr,"%f\t",(double)smParamsT.sMemSize/1024);
+  fprintf(stderr,"%d\t%f\t",total_iter,time);
+  size_t spmvaccess= nz*sizeof(ValueT)*2+(nz+N+1)*sizeof(OffsetT);
+  size_t totalaccess=spmvaccess+7*N*sizeof(ValueT)+max_iter*(spmvaccess+9*N*sizeof(ValueT));
+  // 2*N+3*N + 3*N*(max_iter-1)+ max_iter*(2*N+3*N+2*N    2*nnz+(1+nnz+N))
+  // size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*9*sizeof(ValueT)+N*sizeof(OffsetT);
+  fprintf(stderr,"%f\t%f\t\n",time/total_iter,(double)totalaccess/time*1000/1024/1024/1024);
+// #endif
+// #ifndef __PRINT__
+  // size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*12*sizeof(ValueT)+N*sizeof(OffsetT);
+  printf("<%f ms: %fGB/s>\n",time/total_iter,(double)totalaccess/time*1000/1024/1024/1024);
+// #endif
 //need to print
 #if ENABLE_CPU_DEBUG_CODE
   cpuConjugateGrad(I, J, val, x_cpu, Ax_cpu, p_cpu, r_cpu, nz, N, tol);
@@ -303,21 +372,29 @@ void myTest(
   // }
 
   ValueT rsum, diff, err = 0.0;
+  if(isCheck)
+  {
 
-  for (int i = 0; i < N; i++) {
-    rsum = 0.0;
+    for (int i = 0; i < N; i++) {
+      rsum = 0.0;
 
-    for (int j = I[i]; j < I[i + 1]; j++) {
-      rsum += val[j] * x[J[j]];
+      for (int j = I[i]; j < I[i + 1]; j++) {
+        rsum += val[j] * x[J[j]];
+      }
+
+      diff = fabs(rsum - rhs[i]);
+
+      if (diff > err) {
+        err = diff;
+        // printf("<%d:%f>",i,rsum);
+      }
     }
+    printf("* Test Summary:  Error amount = %f \n", err);
 
-    diff = fabs(rsum - rhs[i]);
-
-    if (diff > err) {
-      err = diff;
-    }
   }
-
+  // ValueT * cpu_ptr=(ValueT*)malloc(sizeof(ValueT)*N);
+  // cudaMemcpy(cpu_ptr,x,N*sizeof(ValueT),cudaMemcpyDeviceToHost);
+  // for(in)
   checkCudaErrors(cudaFree(I));
   checkCudaErrors(cudaFree(J));
   checkCudaErrors(cudaFree(val));
@@ -344,6 +421,22 @@ void myTest(
 #endif
 }
 
+#ifndef COMPILE
+template void myTest<float,int,true,false,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int,true,false,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
 
-template void myTest<float,int>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
-template void myTest<double,int>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<float,int,false,false,true>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int,false,false,true>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+
+template void myTest<float,int,false,true,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int,false,true,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+
+template void myTest<float,int,false,true,true>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int,false,true,true>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+
+template void myTest<float,int,false,false,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+template void myTest<double,int,false,false,false>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+#else 
+template void myTest<REAL,int,ISBASE,CMAT,CVEC>(int devID,cudaDeviceProp& deviceProp,CommandLineArgs& args);
+
+#endif
