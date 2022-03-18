@@ -136,17 +136,17 @@ Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,"")
 Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,"")
 
 
-Hrange("star_80_128_small.log",1,6,"","arch=compute_80,code=sm_80","",2,",SMALL")
-Hrange("star_70_128_small.log",1,6,"","arch=compute_70,code=sm_70","",2,",SMALL")
+# Hrange("star_80_128_small.log",1,6,"","arch=compute_80,code=sm_80","",2,",SMALL")
+# Hrange("star_70_128_small.log",1,6,"","arch=compute_70,code=sm_70","",2,",SMALL")
 
-Hrange("box_80_128_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,",SMALL")
-Hrange("box_70_128_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,",SMALL")
+# Hrange("box_80_128_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,",SMALL")
+# Hrange("box_70_128_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,",SMALL")
 
 
-Hrange("star_80_256_small.log",1,6,"","arch=compute_80,code=sm_80","",1,",SMALL")
-Hrange("star_70_256_small.log",1,6,"","arch=compute_70,code=sm_70","",1,",SMALL")
+# Hrange("star_80_256_small.log",1,6,"","arch=compute_80,code=sm_80","",1,",SMALL")
+# Hrange("star_70_256_small.log",1,6,"","arch=compute_70,code=sm_70","",1,",SMALL")
 
-Hrange("box_80_256_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,",SMALL")
-Hrange("box_70_256_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,",SMALL")
+# Hrange("box_80_256_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,",SMALL")
+# Hrange("box_70_256_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,",SMALL")
 
 

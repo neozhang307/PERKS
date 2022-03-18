@@ -142,14 +142,14 @@ set_target_properties("${type}_genwr" PROPERTIES CUDA_ARCHITECTURES "70;80")
 # set_target_properties("${type}_genwr_small" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
 
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVENVCC" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive_nvcc" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVENVCC" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive_nvcc" )
 
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" "${CMAKE_SOURCE_DIR}/jacobi-minwidth.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr")
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" )
+subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr")
 
 # subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWRSMALL" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr_small")
 

@@ -572,10 +572,10 @@ size_t executeSM = 0;
   dim3 executeBlockDim=block_dim;
   dim3 executeGridDim=grid_dim;
 
-  // #ifndef __PRINT__
+  #ifndef __PRINT__
     printf("blk per sm is %d/%d\n", numBlocksPerSm_current,blkpsm);
     printf("grid is (%d,%d)\n", grid_dim.x, grid_dim.y);
-  // #endif
+  #endif
 
 #endif 
 
