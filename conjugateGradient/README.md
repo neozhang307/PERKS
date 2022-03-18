@@ -9,11 +9,19 @@
 
 # RUN parameter:
   --mtx=[matrix file name]
+  
   --iters=[max iteration]
+  
   --fp32 (single precision)
+  
   --check (check result)
+  
   --vdata (use virtual data)
+  
   --baseline (nothing cache version)
+  
   --cmat (cache matrix)
+  
   --cvec (cache vector)
+  
   (default cache tb level search result of spmv)
