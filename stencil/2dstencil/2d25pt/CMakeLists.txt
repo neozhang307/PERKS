@@ -16,7 +16,7 @@ string(SUBSTRING "${CMAKE_CURRENT_SOURCE_DIR}" ${beg} ${end} type)
 set(reference_goal "${type}_reference.exe")
 # set_properties(CUDA_ARCHITECTURES "70;80")
 
-add_definitions(-D${type})
+# add_definitions(-D${type})
 add_library(${type}_jacobi_gold ./jacobi_gold.cpp)
 add_library(${type}_jacobi_gold_gen ./jacobi_gold_gen.cpp)
 
