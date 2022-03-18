@@ -11,7 +11,7 @@ message("${beg} ${end} ${type}")
 
 set(reference_goal "${type}_reference.exe")
 
-add_definitions(-D${type})
+# add_definitions(-D${type})
 add_library(${type}_jacobi_gold ./${type}_gold.cpp)
 add_library(${type}_jacobi_gold_gen ./${type}_gold_gen.cpp)
 

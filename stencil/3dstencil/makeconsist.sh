@@ -1,4 +1,4 @@
-cp ./j3d7pt/CMakeLists.txt ./j3d13pt
-cp ./j3d7pt/CMakeLists.txt ./j3d17pt
-cp ./j3d7pt/CMakeLists.txt ./j3d27pt
-cp ./j3d7pt/CMakeLists.txt ./poisson
+cp ./3d7pt/CMakeLists.txt ./3d13pt
+cp ./3d7pt/CMakeLists.txt ./3d17pt
+cp ./3d7pt/CMakeLists.txt ./3d27pt
+cp ./3d7pt/CMakeLists.txt ./poisson

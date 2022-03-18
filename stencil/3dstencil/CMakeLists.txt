@@ -8,8 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 
 
-add_subdirectory(j3d7pt)
-add_subdirectory(j3d13pt)
-add_subdirectory(j3d17pt)
-add_subdirectory(j3d27pt)
+add_subdirectory(3d7pt)
+add_subdirectory(3d13pt)
+add_subdirectory(3d17pt)
+add_subdirectory(3d27pt)
 add_subdirectory(poisson)
