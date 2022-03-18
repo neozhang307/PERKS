@@ -726,7 +726,7 @@ struct CsrMatrix
         {
             row_offsets[row] = num_nonzeros;
         }
-            printf("KDLJFKLSDJFI");
+            // printf("KDLJFKLSDJFI");
 
     }
 
