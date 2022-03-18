@@ -835,8 +835,9 @@ __global__ void gpuConjugateGradient_cub
     r1 = *dot_result;
 
     int k = 1;
-    // while (r1 > tol * tol && k <= max_iter) {
-    while (k <= max_iter) {
+    while (true) {
+      if(r1 < tol * tol || k > max_iter)break;
+    // while (k <= max_iter) {
       // printf("%d");
             if (k > 1) {
                 b = r1 / r0;
