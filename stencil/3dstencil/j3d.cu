@@ -519,7 +519,9 @@ size_t executeSM=0;
 #ifdef BASELINE
 
   dim3 block_dim_2(global_bdimx, 1, 1);
-  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, min(height, max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y)));
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y,max(1, min(height/(2*HALO+1), max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y))));
+    // if(executeGridDim.z*(2*HALO+1)>=height)return -4;
+
   // dim3 block_dim3(TILE_X, 1, 1);
   // dim3 grid_dim3(MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current), 1, sm_count*numBlocksPerSm_current/MIN(width_x*width_y/TILE_X/TILE_Y,sm_count*numBlocksPerSm_current));
   
