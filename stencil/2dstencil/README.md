@@ -23,5 +23,5 @@ perksconfig.cuh configured max register for each type of stencil with 128 or 256
 
 
  # LIMITATION 
-- [for portability] only width_x=grid.x*[interger] is supported. 
+- [for portability] only dimx=grid.x*[interger] is supported. 
 
