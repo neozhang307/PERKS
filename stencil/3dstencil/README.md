@@ -20,7 +20,33 @@ run:
   python ProcessRsts2cuh.py
 can generate perksconfig.cuh
 perksconfig.cuh configured max register for each type of stencil with 128 or 256 max register per thread and with single and double precision
+# generated
+ baseline:    baseline implementation
+ 
+ baseline_cm: baseline implementation with persistent thread
+ 
+ persistent:  PERKS noting cache
+ 
+ gen:         PERKS able to choose cache with shared memory
+ 
+ genwr:       PERKS cache to max register amount and about to use shared memory 
 
+# RUN parameter:
+--fp32 (single precision)
+
+--check (check result with CPU)
+
+--usesm (use shared memory for cache)
+
+--bdim=[128,256]
+
+--blkpsm=[TB per SMX, invalid in baseline]
+
+--iter=[total time step amount]
+
+--warmup (warmup run)
+
+--doubletile (double the concurrency of code (only for single precision))
 
  # LIMITATION 
 - [for portability] only width_x=dimx*[interger] is supported. 
