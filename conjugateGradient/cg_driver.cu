@@ -128,6 +128,13 @@ void myTest(
   args.GetCmdLineArgument("iters", max_iter);
   // printf("usedata%d\n",usevdata);
 // #ifdef USEVDATA
+  args.GetCmdLineArgument("mtx", mtx_filename);
+
+  if(mtx_filename=="")
+  {
+    usevdata=true;
+  }
+
   if(usevdata)
   {
     N = 1048576;//*8;
@@ -143,13 +150,7 @@ void myTest(
   }
   else
   {
-    args.GetCmdLineArgument("mtx", mtx_filename);
 
-    if(mtx_filename=="")
-    {
-        mtx_filename="/home/Lingqi/data/general/bmwcra_1/bmwcra_1.mtx";
-        
-    }
     
     
 
