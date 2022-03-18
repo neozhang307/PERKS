@@ -351,8 +351,11 @@ void myTest(
   fprintf(stderr,"%f\t%f\t%f\t",(double)smParamsT.sm_size_coor/1024, (double)smParamsT.sm_blk_size_r/1024, (double)smParamsT.sm_size_unit_matrix*smParamsT.sm_num_matrixperblk/1024);
   fprintf(stderr,"%f\t",(double)smParamsT.sMemSize/1024);
   fprintf(stderr,"%d\t%f\t",total_iter,time);
-  size_t spmvaccess= nz*sizeof(ValueT)*2+(nz+N+1)*sizeof(OffsetT);
-  size_t totalaccess=spmvaccess+7*N*sizeof(ValueT)+max_iter*(spmvaccess+9*N*sizeof(ValueT));
+  // size_t spmvaccess= nz*sizeof(ValueT)*2+(nz+N+1)*sizeof(OffsetT);
+  // size_t totalaccess=spmvaccess+7*N*sizeof(ValueT)+max_iter*(spmvaccess+9*N*sizeof(ValueT));
+  //MINIAN mem access: 1 spmv load + 3 vector update(1 update = 1 load + 1 store)
+  size_t spmvaccess= nz*sizeof(ValueT)+(nz+N+1)*sizeof(OffsetT);
+  size_t totalaccess=max_iter*(spmvaccess+6*N*sizeof(ValueT));
   // 2*N+3*N + 3*N*(max_iter-1)+ max_iter*(2*N+3*N+2*N    2*nnz+(1+nnz+N))
   // size_t totalaccess=nz*(sizeof(ValueT)*2+sizeof(OffsetT))+N*9*sizeof(ValueT)+N*sizeof(OffsetT);
   fprintf(stderr,"%f\t%f\t\n",time/total_iter,(double)totalaccess/time*1000/1024/1024/1024);
