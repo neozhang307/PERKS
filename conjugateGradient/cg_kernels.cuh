@@ -631,7 +631,8 @@ template <
     typename    AggregatesOutputIteratorT,
     bool isBaseline=true,
     bool cacheMatrix=false,
-    bool cacheVector=false 
+    bool cacheVector=false,
+    bool isStaticIteration=false
     >//,      ///< Random-access output iterator type for values
     // typename    OffsetT,                        ///< Signed integer type for global offsets
             // typename    ScanTileStateT>                 ///< Tile status interface type
@@ -836,7 +837,8 @@ __global__ void gpuConjugateGradient_cub
 
     int k = 1;
     while (true) {
-      if(r1 < tol * tol || k > max_iter)break;
+      if((!isStaticIteration&r1 < tol * tol) || k > max_iter)break;
+      // if(k > max_iter)break;
     // while (k <= max_iter) {
       // printf("%d");
             if (k > 1) {

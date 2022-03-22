@@ -566,7 +566,8 @@ struct DispatchCG
             //initialized temp storyage
             void *d_temp_storage,
             size_t temp_storage_bytes,
-            SpmvParams<ValueT,OffsetT> spmvParams
+            SpmvParams<ValueT,OffsetT> spmvParams,
+            bool isStaticIter=false
             )
         {
 
@@ -587,18 +588,14 @@ struct DispatchCG
                 auto spmv_kernel=DeviceSpmvKernel<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false>;
                 auto segment_fixup_kernel=DeviceSegmentFixupKernel<PtxSegmentFixupPolicy, KeyValuePairT*, ValueT*, OffsetT, ScanTileStateT>;
 //baseline
-// #ifdef NOCOO
-                // auto perk_cg_kernel = gpuConjugateGradient_cub<PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, false, false, PtxSegmentFixupPolicy, ValueT*, true>;  
-// #else
-                auto perk_cg_kernel = gpuConjugateGradient_cub
+
+                auto perk_cg_kernel = isStaticIter? gpuConjugateGradient_cub
                         <PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, 
                         false, false, PtxSegmentFixupPolicy, ValueT*, 
-                        isbaseline,cacheMatrix,cacheVector>;  
-                        // isbaseline,cacheMatrix,cacheVector>;  
-// #endif
-                // bool cacheMatrix=cacheMatrix;
-                // bool cacheVector=false;
-                // bool cacheVector=cacheVector;
+                        isbaseline,cacheMatrix,cacheVector,true>:gpuConjugateGradient_cub
+                        <PtxSpmvPolicyT, ScanTileStateT, ValueT, OffsetT, CoordinateT, 
+                        false, false, PtxSegmentFixupPolicy, ValueT*, 
+                        isbaseline,cacheMatrix,cacheVector,false>;  
 
                 using std::is_same;
                 size_t unchangeableTempt=0;//max(sizeof(AgentSpmvT::TempStorage),sizeof(AgentSegmentFixupT::TempStorage));

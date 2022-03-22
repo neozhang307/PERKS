@@ -112,9 +112,11 @@ void myTest(
   bool warmup=false;
   int  max_iter   = -1;
   bool isCheck=false;
+  bool isStaticIter=false;
   usevdata = args.CheckCmdLineFlag("vdata");
   warmup = args.CheckCmdLineFlag("warmup");
   isCheck = args.CheckCmdLineFlag("check");
+  isStaticIter = args.CheckCmdLineFlag("staticiter");
   // baseline = args.CheckCmdLineFlag("baseline");
   // cachematrix = args.CheckCmdLineFlag("cmat");
   // cachevector = args.CheckCmdLineFlag("cvec");
@@ -279,14 +281,14 @@ void myTest(
     checkCudaErrors(cudaEventCreate(&warmup_stop));
     checkCudaErrors(cudaEventRecord(warmup_start, 0));
     DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
-                                        d_temp_storage, temp_storage_bytes,params);    
+                                        d_temp_storage, temp_storage_bytes,params,isStaticIter);    
     checkCudaErrors(cudaEventRecord(warmup_stop, 0));
     checkCudaErrors(cudaDeviceSynchronize());
     float time;
     checkCudaErrors(cudaEventElapsedTime(&time, warmup_start, warmup_stop));
     cgParamsT.max_iter              =max(1, (int) (2*350/time));
     DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
-                                        d_temp_storage, temp_storage_bytes,params);        
+                                        d_temp_storage, temp_storage_bytes,params,isStaticIter);        
     checkCudaErrors(cudaDeviceSynchronize());
 
     checkCudaErrors(cudaEventDestroy(warmup_start));
@@ -301,7 +303,7 @@ void myTest(
   // printf("----");
 
   DispatchCG<ValueT,OffsetT,baseline,cacheMatrix,cacheVector>::ProcessDispatchCG(smParamsT,cgParamsT, 
-                                        d_temp_storage, temp_storage_bytes,params);
+                                        d_temp_storage, temp_storage_bytes,params,isStaticIter);
   
   checkCudaErrors(cudaEventRecord(stop, 0));
   checkCudaErrors(cudaDeviceSynchronize());
