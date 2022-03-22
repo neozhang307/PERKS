@@ -1,5 +1,8 @@
 *.log
 *.mat
+*.tar.gz
 *.back
+*.o
+*.a
 *.o
 *.xlsx
