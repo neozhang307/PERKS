@@ -519,7 +519,8 @@ size_t executeSM=0;
 #ifdef BASELINE
 
   dim3 block_dim_2(global_bdimx, 1, 1);
-  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y,max(1, min(height/(2*HALO+1), max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y))));
+  dim3 grid_dim_2(width_x/TILE_X, width_y/TILE_Y, max(1, min(height/(2*HALO+1), max(2,(sm_count*8)*TILE_X*TILE_Y/width_x/width_y))));
+  // printf("<<%d,%d,%d>>\n",grid_dim_2.x,grid_dim_2.y,grid_dim_2.z);
     // if(executeGridDim.z*(2*HALO+1)>=height)return -4;
 
   // dim3 block_dim3(TILE_X, 1, 1);
@@ -601,8 +602,8 @@ size_t executeSM=0;
   // printf("SM is %ld/%ld KB\n",executeSM/1024,SharedMemoryUsed/1024);
 #endif
 
-  if(executeGridDim.x*executeGridDim.y*executeGridDim.z<sm_count)return -2;
-  if(executeGridDim.z*(2*HALO+1)>=height)return -4;
+  // if(executeGridDim.x*executeGridDim.y*executeGridDim.z<sm_count)return -2;
+  if(executeGridDim.z*(2*HALO+1)>height)return -4;
   // if(max_sm_flder+reg_folder_z<2*halo)return -4;
   
   // printf("<%d,%d,%d>",executeGridDim.x,executeGridDim.y,executeGridDim.z);

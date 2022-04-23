@@ -111,8 +111,8 @@ set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
 # # mylib("${type}_baseline_memwarp" "${CMAKE_SOURCE_DIR}/j3d-baseline-memwarp.cu" "${DEFAULT_COMPILER_FLAG}  ")
 # # set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
-mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/j3d-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT ")
-set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
+# mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/j3d-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT ")
+# set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
 mylib("${type}_general" "${CMAKE_SOURCE_DIR}/j3d-general.cu" "${DEFAULT_COMPILER_FLAG} ")
 set_target_properties("${type}_general" PROPERTIES CUDA_ARCHITECTURES "70;80")
@@ -124,9 +124,9 @@ set_target_properties("${type}_general_wrapper" PROPERTIES CUDA_ARCHITECTURES "7
 # # # # # # subcompile(${type} )
 # # # subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_naive" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline" )
 # # # # # subcompile(${type} "${DEFAULT_COMPILER_FLAG} " "BASELINE_MEMWARP" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_baseline_memwarp" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG}  -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_persistent" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG}  -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_persistent" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG}  -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_general" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG}  -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/j3d.cu" DRIVER "${CMAKE_SOURCE_DIR}/j3d.driver.cpp" LIB "${type}_general_wrapper" )
 
