@@ -123,8 +123,8 @@ set_target_properties("${type}_baseline" PROPERTIES CUDA_ARCHITECTURES "70;80")
 # # mylib("${type}_baseline_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG}  -DSMASYNC")
 # # set_target_properties("${type}_baseline_async" PROPERTIES CUDA_ARCHITECTURES "80")
 
-mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT")
-set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
+# mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT")
+# set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
 # # mylib("${type}_persistent_async" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG}  -DPERSISTENT -DSMASYNC")
 # # set_target_properties("${type}_persistent_async" PROPERTIES CUDA_ARCHITECTURES "70;80")
 
@@ -146,53 +146,9 @@ subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVE" SOURCE "${CMAK
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "NAIVENVCC" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive_nvcc" )
 
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
-subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_baseline" )
+# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "PERSISTENT" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_persistent" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" )
 subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWR" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr")
 
-# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -D__PRINT__" "GENWRSMALL" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_genwr_small")
 
-
-# set_target_properties($${type}_persistent_async PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-# mylib("${type}_persistent" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${DEFAULT_COMPILER_FLAG} -DPERSISTENT")
-# set_target_properties("${type}_persistent" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# mylib("${type}_gen" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DCHECK")
-# set_target_properties("${type}_gen" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# mylib("${type}_gen_async" "${CMAKE_SOURCE_DIR}/jacobi-general.cu" "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DSMASYNC")
-# set_target_properties("${type}_gen_async" PROPERTIES CUDA_ARCHITECTURES "80")
-
-# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "NAIVE" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu"  DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_naive")
-# # subcompile(${type} ${DEFAULT_COMPILER_FLAG} "BASELINE_CM" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-
-
-# add_library("${type}_persistent_2d" "${CMAKE_SOURCE_DIR}/jacobi-baseline.cu" "${CMAKE_SOURCE_DIR}/jacobi-2d.cu")
-# set_target_properties("${type}_persistent_2d" PROPERTIES COMPILE_FLAGS "${DEFAULT_COMPILER_FLAG} ${COMPILECG} -DPERSISTENT")
-# set_target_properties("${type}_persistent_2d" PROPERTIES CUDA_ARCHITECTURES "70;80")
-
-# add_executable("${type}_persistent.exe" "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-# set_target_properties("${type}_persistent.exe" PROPERTIES CUDA_ARCHITECTURES "70;80")
-# set_target_properties("${type}_persistent.exe" PROPERTIES COMPILE_FLAGS "${DEFAULT_COMPILER_FLAG}")
-# set_target_properties("${type}_persistent_2d" PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-# set_target_properties("${type}_persistent.exe" PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-
-# target_link_libraries("${type}_persistent.exe" PUBLIC "${type}_persistent_2d" ${type}_jacobi_gold ${type}_jacobi_gold_gen)
-
-# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" "${type}_gen_async")
-# subcompile(${type} "${DEFAULT_COMPILER_FLAG} -DCHECK" "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp" LIB "${type}_gen" )
-# subcompile(${type} ${DEFAULT_COMPILER_FLAG} "GEN" SOURCE "${CMAKE_SOURCE_DIR}/jacobi-2d.cu" DRIVER "${CMAKE_SOURCE_DIR}/jacobi.driver.cpp")
-
-
-#subcompile(type DEFAULT_COMPILER_FLAG "BASELINE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen)
-#subcompile(${type} DEFAULT_COMPILER_FLAG "NAIVE" SHAREDLIB ${type}_jacobi_gold ${type}_jacobi_gold_gen )
-#set(naive_goal "${type}_naive.exe")
-#set(NAIVE_COMPILER_FLAG "-DNAIVE ")
-#string(APPEND NAIVE_COMPILER_FLAG "${DEFAULT_COMPIcudaLER_FLAG}")
-
-#add_library(${type}_jacobi_naive ${CMAKE_SOURCE_DIR}/jacobi-star.cu)
-#set_target_properties(${type}_jacobi_naive PROPERTIES
-#                            COMPILE_FLAGS "${NAIVE_COMPILER_FLAG}")       
-
-#add_executable(${naive_goal} ${CMAKE_SOURCE_DIR}/jacobi.driver.cpp)
-#target_link_libraries(${naive_goal} PUBLIC 
-#                ${type}_jacobi_naive ${type}_jacobi_gold ${type}_jacobi_gold_gen)

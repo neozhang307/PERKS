@@ -1,10 +1,5 @@
 import re
 
-#sample code for ptx analysis
-
-# with open("./log") as f:
-#     contents=f.readlines()
-#     print("funcname","sm","type","halo","rf","reg","sm","sps","spl")
 
 def parseptx(contents, funcname): 
     i=0
@@ -32,11 +27,7 @@ def parseptx(contents, funcname):
                 meminfos=re.findall(r"\d+",contents[i+3].decode('UTF-8'))
                 regusage=meminfos[0]
                 smusage=meminfos[1]
-                # print("kernel_general",arch.group(0),
-                #     Type, UseSM, regfolder, 
-                #     regusage,smusage,storespill,loadspill)
-                # spillnum=int(loadspill)+int(storespill)
-                # return spillnum
+
                 return arch.group(0),Type, UseSM, regfolder, regusage,smusage,storespill,loadspill
             i+=4
         else:
@@ -52,7 +43,6 @@ def compile(archstring, halostring, regfolderstring, realstring,useSM,asyncSM,bo
     basicstring="nvcc -std=c++14 --cubin -gencode {0} -Xptxas \"-v\" -DCONFIGURE,HALO={1},TYPE={2},RTILE_Y={9},RTILE_X=256,REG_FOLDER_Y={3}{4}{5}{6}{8} -DBLOCKTYPE={7} ./jacobi-general.cu"
 
     generated_string=basicstring.format(archstring,halostring,realstring,regfolderstring,useSM,asyncSM,box,btype,isSmall,TILE_Y)
-    # print(generated_string)
 
     sub = subprocess.Popen(generated_string, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -94,59 +84,56 @@ def Hrange(filename,halostart,haloend,box,archstring,asyncSM,btype,isSmall):
     for i in range(halostart,haloend+1):
         HuseSMreal(filename,i,box,archstring,asyncSM,btype,isSmall)
 
-# def blockTYPE(filename,halostart,haloend,box,archstring,asyncSM):
-#     Hrange(filename,halostart,haloend,box,archstring,asyncSM,1)
-#     Hrange(filename,halostart,haloend,box,archstring,asyncSM,2)
+from multiprocessing import Process
+import os
 
-# def HuseSMrealbox(halostring,archstring,asyncSM):
-#     HuseSMreal(halostring,"",archstring,asyncSM)
-#     HuseSMreal(halostring,",BOX",archstring,asyncSM)
+# archstring="arch=compute_80,code=sm_80"
+# halostring=1
 
-# def HuseSMrealboxArch(halostring):
-#     HuseSMrealbox(halostring,"arch=compute_80,code=sm_80","")
-#     # HuseSMrealbox(halostring,"arch=compute_80,code=sm_80",",ASYNCSM")
-#     HuseSMrealbox(halostring,"arch=compute_70,code=sm_70","")
+# Hrange("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2,"")
+# Hrange("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2,"")
 
-
-archstring="arch=compute_80,code=sm_80"
-halostring=1
-# regfolderstring=16
-# realstring="float"
-# useSM=",USESM"
-# useSM=""
-# asyncSM=",ASYNCSM"
-# asyncSM=""
-# box=",BOX"
-# box=""
-# HuseSMrealboxArch(1)
-# print("star")
+# Hrange("box_80_128.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,"")
+# Hrange("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,"")
 
 
-Hrange("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2,"")
-Hrange("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2,"")
+# Hrange("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1,"")
+# Hrange("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1,"")
 
-Hrange("box_80_128.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,"")
-Hrange("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,"")
+# Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,"")
+# Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,"")
 
+p1 = Process(target=Hrange, args=("star_80_128.log",1,6,"","arch=compute_80,code=sm_80","",2,""))
+p2 = Process(target=Hrange, args=("star_70_128.log",1,6,"","arch=compute_70,code=sm_70","",2,""))
 
-Hrange("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1,"")
-Hrange("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1,"")
+p3 = Process(target=Hrange, args=("box_80_128.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,""))
+p4 = Process(target=Hrange, args=("box_70_128.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,""))
 
-Hrange("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,"")
-Hrange("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,"")
+p5 = Process(target=Hrange ,args=("star_80_256.log",1,6,"","arch=compute_80,code=sm_80","",1,""))
+p6 = Process(target=Hrange ,args=("star_70_256.log",1,6,"","arch=compute_70,code=sm_70","",1,""))
 
-
-# Hrange("star_80_128_small.log",1,6,"","arch=compute_80,code=sm_80","",2,",SMALL")
-# Hrange("star_70_128_small.log",1,6,"","arch=compute_70,code=sm_70","",2,",SMALL")
-
-# Hrange("box_80_128_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",2,",SMALL")
-# Hrange("box_70_128_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",2,",SMALL")
+p7 = Process(target=Hrange ,args=("box_80_256.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,""))
+p8 = Process(target=Hrange ,args=("box_70_256.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,""))
 
 
-# Hrange("star_80_256_small.log",1,6,"","arch=compute_80,code=sm_80","",1,",SMALL")
-# Hrange("star_70_256_small.log",1,6,"","arch=compute_70,code=sm_70","",1,",SMALL")
+p1.start()
+p2.start()
+p3.start()
+p4.start()
+p5.start()
+p6.start()
+p7.start()
+p8.start()
 
-# Hrange("box_80_256_small.log",1,2,",BOX","arch=compute_80,code=sm_80","",1,",SMALL")
-# Hrange("box_70_256_small.log",1,2,",BOX","arch=compute_70,code=sm_70","",1,",SMALL")
+p1.join()
+p2.join()
+p3.join()
+p4.join()
+p5.join()
+p6.join()
+p7.join()
+p8.join()
+
+
 
 
