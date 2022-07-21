@@ -692,7 +692,6 @@ struct AgentSpmv
         ValueT vecs[ITEMS_PER_THREAD];
         // ValueT vals[ITEMS_PER_THREAD];
         // Gather the nonzeros for the merge tile into shared memory
-        // LINGQI: make this a prefetch format could improve performance. 
        
 
         // Gather the row end-offsets for the merge tile into shared memory

@@ -716,13 +716,7 @@ __global__ void gpuConjugateGradient_cub
     // {
     //     sm_r[i*blockDim.x+threadIdx.x]=sm_r_start;
     // }
-    //LINGQI:
-    /*
-        I tried to merge all temp space (doable). 
-        Yet the AgentSpmv::TempStorage would run into bugs. 
-        Not sure the reason
-        Might be some 
-    */
+
 
     {
         if(isBaseline)
