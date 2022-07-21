@@ -712,7 +712,7 @@ if(usewarmup){
 // printf("herer");
 
 
-//@LINGQI: l2 cache setting not show performance difference. 
+//@NEO: l2 cache setting not show performance difference. 
 #if defined(GEN) && defined(L2PER)
     // REAL l2perused;
     // size_t inner_window_size = 30*1024*1024;

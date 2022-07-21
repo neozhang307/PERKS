@@ -35,7 +35,7 @@ set(archlist " -gencode arch=compute_80,code=sm_80 ")
 string(APPEND archlist " -gencode arch=compute_70,code=sm_70 ")
 
 # set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,__PRINT__  -Xptxas \"-v -dlcm=cg\"")
-# @LINGQI: previous experiments show that setting Xptxas might harm performance
+# @NEO: previous experiments show that setting Xptxas might harm performance
 # set(DEFAULT_COMPILER_FLAG "-D_TIMER_,MULTIGEN,__PRINT__  ")
 set(DEFAULT_COMPILER_FLAG "-D_TIMER_ ")
 # set(COMPILECG " -rdc=true -c ")

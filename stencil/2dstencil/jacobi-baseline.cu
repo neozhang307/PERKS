@@ -21,7 +21,7 @@ namespace cg = cooperative_groups;
 // #define SMASYNC
 // #if defined(BASELINE_CM)||defined(BASELINE)||defined(PERSISTENT)
 /*
-LINGQI:
+NEO:
 async and box both too complex to use template
 in asyn template function, performance decreased a lot
 */
