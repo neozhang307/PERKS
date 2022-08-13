@@ -16,8 +16,11 @@
   
  # Auto register conifguration
 run:
+
   python ProcessCompilerLog.py
+
   python ProcessRsts2cuh.py
+
 can generate perksconfig.cuh
 perksconfig.cuh configured max register for each type of stencil with 128 or 256 max register per thread and with single and double precision
 
