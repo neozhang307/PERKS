@@ -11,7 +11,7 @@
   run ./config.sh 
   
   run ./build.sh
-  Cancel changes
+  
   the builded excutable files is generated in ./build/init/
   
  # Auto register conifguration
