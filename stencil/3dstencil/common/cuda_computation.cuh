@@ -289,10 +289,10 @@ __global__ void kernel3d_restrict(REAL* input, REAL* output,
     __global__ void kernel3d_restrict<_type,halo>(_type*,_type*,int,int,int);
 
 template<class REAL, int halo , int ipt, int tilex, int blockdim=256>
-__global__ void kernel3d_baseline(REAL* __restrict__ input, REAL*__restrict__ output,
+__global__ void kernel3d_baseline(REAL*  input, REAL* output,
                                   int height, int width_y, int width_x); 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE(_type,halo,ipt,tilex,blockdim) \
-    __global__ void kernel3d_baseline<_type,halo,ipt,tilex,blockdim>(_type*__restrict__,_type*__restrict__,int,int,int);
+    __global__ void kernel3d_baseline<_type,halo,ipt,tilex,blockdim>(_type*,_type*,int,int,int);
 
 
 // template<class REAL, int halo , int ipt, int tilex, int tiley>
@@ -303,12 +303,12 @@ __global__ void kernel3d_baseline(REAL* __restrict__ input, REAL*__restrict__ ou
 
 
 template<class REAL, int halo, int ipt, int tilex, int blockdim=256>
-__global__ void kernel3d_persistent(REAL* __restrict__ input, REAL*__restrict__ output,
+__global__ void kernel3d_persistent(REAL*  input, REAL* output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration); 
 #define PERKS_DECLARE_INITIONIZATION_PERSISTENT(_type,halo,ipt,tilex,blockdim) \
-    __global__ void kernel3d_persistent<_type,halo,ipt,tilex,blockdim>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int);
+    __global__ void kernel3d_persistent<_type,halo,ipt,tilex,blockdim>(_type*,_type*,int,int,int, _type*, _type*, int);
 
 
 // minblocks:
@@ -343,13 +343,13 @@ template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int tilex,
     int reg_folder_z=0,int blocktype,  bool UseSMCache=false, 
     int BLOCKDIM=256, 
     int minblocks=getminblocks<REAL,blocktype,LOCAL_ITEM_PER_THREAD>::val>
-__global__ void kernel3d_general(REAL* __restrict__ input, REAL*__restrict__ output,
+__global__ void kernel3d_general(REAL*  input, REAL* output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration, int max_sm_flder=0); 
 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,halo,ipt,tilex,regf,minblocks, usesm,blckdim) \
-    __global__ void kernel3d_general<_type,halo,ipt,tilex,regf,minblocks,usesm,blckdim>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
+    __global__ void kernel3d_general<_type,halo,ipt,tilex,regf,minblocks,usesm,blckdim>(_type*,_type*,int,int,int, _type*, _type*, int, int);
 
 
 
@@ -359,12 +359,12 @@ template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X,
           int registeramount, bool UseSMCache, int BLOCKDIM, int shape=star_shape,
           int minblocks=256/registeramount>
 __global__ void  kernel3d_general_wrapper
-(REAL* __restrict__ input, REAL*__restrict__ output,
+(REAL*  input, REAL* output,
                                   int height, int width_y, int width_x, 
                                   REAL * l2_cache_i, REAL * l2_cache_o, 
                                   int iteration, int max_sm_flder=0);
 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL_WRAPPER(_type,halo,ttile,tilex,ramount,usesm,blockdim,shape) \
-    __global__ void kernel3d_general_wrapper<_type,halo,ttile,tilex,ramount,usesm,blockdim,shape>(_type*__restrict__,_type*__restrict__,int,int,int, _type*, _type*, int, int);
+    __global__ void kernel3d_general_wrapper<_type,halo,ttile,tilex,ramount,usesm,blockdim,shape>(_type*,_type*,int,int,int, _type*, _type*, int, int);
 
 

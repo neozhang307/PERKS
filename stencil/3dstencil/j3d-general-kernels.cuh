@@ -31,7 +31,7 @@ template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int BLOCKDIM, int LOCA
           int REGY_SIZE=REG_Y_SIZE_MOD, int REGX_SIZE=2*halo+1>
 __device__ void __forceinline__ process_one_layer 
       (
-        REAL * __restrict__ input, REAL * __restrict__ output, 
+        REAL *  input, REAL *  output, 
         REAL* smbuffer_buffer_ptr[SM_SIZE_Z],
 
         // REAL r_smbuffer[REG_SIZE_Z][LOCAL_ITEM_PER_THREAD],

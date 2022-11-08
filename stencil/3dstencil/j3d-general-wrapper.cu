@@ -24,8 +24,8 @@ template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X,
           int registeramount, bool UseSMCache, int BLOCKDIM, int shape,
           int minblocks>
 __launch_bounds__(MAXTHREAD, minblocks)
-__global__ void kernel3d_general_wrapper(REAL * __restrict__ input, 
-                                REAL * __restrict__ output, 
+__global__ void kernel3d_general_wrapper(REAL *  input, 
+                                REAL *  output, 
                                 int width_z, int width_y, int width_x,
                                 REAL* l2_cache_i, REAL* l2_cache_o,
                                 int iteration,

@@ -22,12 +22,12 @@ template<class REAL, int halo, int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int 
 __global__ void 
 // __launch_bounds__(256, 2)
 #ifndef PERSISTENT
-kernel3d_baseline(REAL * __restrict__ input, 
-                                REAL * __restrict__ output, 
+kernel3d_baseline(REAL *  input, 
+                                REAL *  output, 
                                 int width_z, int width_y, int width_x) 
 #else
-kernel3d_persistent(REAL * __restrict__ input, 
-                                REAL * __restrict__ output, 
+kernel3d_persistent(REAL *  input, 
+                                REAL *  output, 
                                 int width_z, int width_y, int width_x,
                                 REAL* l2_cache_i, REAL* l2_cache_o,
                                 int iteration) 

@@ -38,8 +38,8 @@ int LOCAL_ITEM_PER_THREAD, int LOCAL_TILE_X, int reg_folder_z,int blocktype, boo
 // __launch_bounds__(256, 2)
 __launch_bounds__(MAXTHREAD, minblocks)
 __global__ void 
-kernel3d_general(REAL * __restrict__ input, 
-                                REAL * __restrict__ output, 
+kernel3d_general(REAL *  input, 
+                                REAL *  output, 
                                 int width_z, int width_y, int width_x,
                                 REAL* l2_cache_i, REAL* l2_cache_o,
                                 int iteration,
@@ -91,7 +91,7 @@ kernel3d_general(REAL * __restrict__ input,
   PERKS_INITIALIZE_ALL_TYPE_7ARG(PERKS_DECLARE_INITIONIZATION_GENERAL,HALO,16,TILE_X,REG_FOLDER_Z,1,false,128);
 #else
   template __global__ void kernel3d_general<TYPE,HALO,ITERMPT,TILE_X,REG_FOLDER_Z,BLOCKTYPE,isUseSM,BDIM> 
-    (TYPE *__restrict__, TYPE *__restrict__ , int , int , int, TYPE*,TYPE*,int,int);
+    (TYPE *, TYPE * , int , int , int, TYPE*,TYPE*,int,int);
 #endif
 // #ifndef PERSISTENT 
   // PERKS_INITIALIZE_ALL_TYPE_1ARG(PERKS_DECLARE_INITIONIZATION_BASELINE,HALO);
