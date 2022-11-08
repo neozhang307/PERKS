@@ -41,8 +41,8 @@ __global__ void
     kernel_persistent_baseline_box
   #endif
 #endif
-(REAL * __restrict__ input, int width_y, int width_x, 
-  REAL *__restrict__ __var_4__,REAL *__restrict__ l2_cache, REAL *__restrict__ l2_cachetmp, 
+(REAL *  input, int width_y, int width_x, 
+  REAL * __var_4__,REAL * l2_cache, REAL * l2_cachetmp, 
   int iteration)
 #else
 __global__ void 
@@ -59,8 +59,8 @@ __global__ void
     kernel_baseline_box
   #endif
 #endif
-(REAL * __restrict__ input, int width_y, int width_x, 
-  REAL * __restrict__ __var_4__)
+(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__)
 #endif
 
 {
@@ -216,29 +216,29 @@ __global__ void
   #ifndef BOX
     #ifdef SMASYNC
       #ifdef PERSISTENT
-          template __global__ void kernel_persistent_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_persistent_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*,TYPE*,TYPE*,int );
       #else
-          template __global__ void kernel_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__);
+          template __global__ void kernel_baseline_async<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*);
       #endif
     #else
       #ifdef PERSISTENT
-          template __global__ void kernel_persistent_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_persistent_baseline<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*,TYPE*,TYPE*,int );
       #else
-          template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__ );
+          template __global__ void kernel_baseline<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE* );
       #endif
     #endif
   #else
     #ifdef SMASYNC
       #ifdef PERSISTENT
-          template __global__ void kernel_persistent_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_persistent_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*,TYPE*,TYPE*,int );
       #else
-          template __global__ void kernel_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__);
+          template __global__ void kernel_baseline_box_async<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*);
       #endif
     #else 
       #ifdef PERSISTENT
-          template __global__ void kernel_persistent_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__,TYPE*__restrict__,TYPE*__restrict__,int );
+          template __global__ void kernel_persistent_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE*,TYPE*,TYPE*,int );
       #else
-          template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*__restrict__,int,int,TYPE*__restrict__ );
+          template __global__ void kernel_baseline_box<TYPE,RTILE_Y,HALO>(TYPE*,int,int,TYPE* );
       #endif    
     #endif
   #endif

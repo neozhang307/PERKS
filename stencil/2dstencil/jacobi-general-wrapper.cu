@@ -15,9 +15,9 @@ template<class REAL, int LOCAL_TILE_Y, int halo,
           int registeramount, bool UseSMCache, bool isstar,
           int minblocks>
 __launch_bounds__(MAXTHREAD, minblocks)
-__global__ void kernel_general_wrapper(REAL * __restrict__ input, int width_y, int width_x, 
-  REAL * __restrict__ __var_4__, 
-  REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
+__global__ void kernel_general_wrapper(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__, 
+  REAL *  l2_cache_o,REAL *  l2_cache_i,
   int iteration,
   int max_sm_flder)
 {

@@ -195,99 +195,99 @@ kernel2d_restrict_box (REAL* input, int width_y, int width_x, REAL* output);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void
-kernel_baseline (REAL*__restrict__ input, int width_y, int width_x, REAL*__restrict__ output);
+kernel_baseline (REAL* input, int width_y, int width_x, REAL* output);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void
-kernel_baseline_box (REAL* __restrict__ input, int width_y, int width_x, REAL* __restrict__ output);
+kernel_baseline_box (REAL*  input, int width_y, int width_x, REAL*  output);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void
-kernel_baseline_async (REAL*__restrict__ input, int width_y, int width_x, REAL*__restrict__ output);
+kernel_baseline_async (REAL* input, int width_y, int width_x, REAL* output);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
 __global__ void
-kernel_baseline_box_async (REAL* __restrict__ input, int width_y, int width_x, REAL* __restrict__ output);
+kernel_baseline_box_async (REAL*  input, int width_y, int width_x, REAL*  output);
 
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE(_type,tile,halo) \
-    __global__ void kernel_baseline<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+    __global__ void kernel_baseline<_type,tile,halo>(_type*,int,int,_type*);
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE_BOX(_type,tile,halo) \
-    __global__ void kernel_baseline_box<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+    __global__ void kernel_baseline_box<_type,tile,halo>(_type*,int,int,_type*);
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE_ASYNC(_type,tile,halo) \
-    __global__ void kernel_baseline_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+    __global__ void kernel_baseline_async<_type,tile,halo>(_type*,int,int,_type*);
 
 #define PERKS_DECLARE_INITIONIZATION_BASELINE_BOX_ASYNC(_type,tile,halo) \
-    __global__ void kernel_baseline_box_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__);
+    __global__ void kernel_baseline_box_async<_type,tile,halo>(_type*,int,int,_type*);
 
 
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
-__global__ void kernel_persistent_baseline(REAL *__restrict__  input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_persistent_baseline(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration);
 
   template<class REAL, int LOCAL_TILE_Y, int halo>
-__global__ void kernel_persistent_baseline_box( REAL * __restrict__ input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_persistent_baseline_box( REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
-__global__ void kernel_persistent_baseline_async(REAL *__restrict__  input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_persistent_baseline_async(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration);
 
 template<class REAL, int LOCAL_TILE_Y, int halo>
-__global__ void kernel_persistent_baseline_box_async( REAL * __restrict__ input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_persistent_baseline_box_async( REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration);
 
 #define PERKS_DECLARE_INITIONIZATION_PBASELINE(_type,tile,halo) \
-    __global__ void kernel_persistent_baseline<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
+    __global__ void kernel_persistent_baseline<_type,tile,halo>(_type*,int,int,_type*,_type*,_type*,int );
 
 #define PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX(_type,tile,halo) \
-    __global__ void kernel_persistent_baseline_box<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
+    __global__ void kernel_persistent_baseline_box<_type,tile,halo>(_type*,int,int,_type*,_type*,_type*,int );
 
 #define PERKS_DECLARE_INITIONIZATION_PBASELINE_ASYNC(_type,tile,halo) \
-    __global__ void kernel_persistent_baseline_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
+    __global__ void kernel_persistent_baseline_async<_type,tile,halo>(_type*,int,int,_type*,_type*,_type*,int );
 
 #define PERKS_DECLARE_INITIONIZATION_PBASELINE_BOX_ASYNC(_type,tile,halo) \
-    __global__ void kernel_persistent_baseline_box_async<_type,tile,halo>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int );
+    __global__ void kernel_persistent_baseline_box_async<_type,tile,halo>(_type*,int,int,_type*,_type*,_type*,int );
 
 template<class REAL, int LOCAL_TILE_Y, int halo,int reg_folder_y, int minblocks, bool UseSMCache>
-__global__ void kernel_general(REAL *__restrict__  input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_general(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration, int max_sm_flder);
 
 template<class REAL, int LOCAL_TILE_Y, int halo,int reg_folder_y, int minblocks, bool UseSMCache>
-__global__ void kernel_general_async(REAL *__restrict__  input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_general_async(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration, int max_sm_flder);
 
 template<class REAL, int LOCAL_TILE_Y, int halo,int reg_folder_y, int minblocks, bool UseSMCache>
-__global__ void kernel_general_box( REAL * __restrict__ input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_general_box( REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration, int max_sm_flder);
 
 template<class REAL, int LOCAL_TILE_Y, int halo,int reg_folder_y, int minblocks, bool UseSMCache>
-__global__ void kernel_general_box_async( REAL * __restrict__ input, int width_y, int width_x, 
-  REAL *__restrict__  __var_4__,REAL *__restrict__  l2_cache, REAL *__restrict__  l2_cachetmp, 
+__global__ void kernel_general_box_async( REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__,REAL *  l2_cache, REAL *  l2_cachetmp, 
   int iteration, int max_sm_flder);
 
 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL(_type,tile,halo,rf,minblocks,usesm) \
-    __global__ void kernel_general<_type,tile,halo,rf,minblocks,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
+    __global__ void kernel_general<_type,tile,halo,rf,minblocks,usesm>(_type*,int,int,_type*,_type*,_type*,int, int);
 
 #define PERKS_DECLARE_INITIONIZATION_GENERALBOX(_type,tile,halo,rf,minblocks,usesm) \
-    __global__ void kernel_general_box<_type,tile,halo,rf,minblocks,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
+    __global__ void kernel_general_box<_type,tile,halo,rf,minblocks,usesm>(_type*,int,int,_type*,_type*,_type*,int, int);
 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL_ASYNC(_type,tile,halo,rf,minblocks,usesm) \
-    __global__ void kernel_general_async<_type,tile,halo,rf,minblocks,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
+    __global__ void kernel_general_async<_type,tile,halo,rf,minblocks,usesm>(_type*,int,int,_type*,_type*,_type*,int, int);
 
 #define PERKS_DECLARE_INITIONIZATION_GENERALBOX_ASYNC(_type,tile,halo,rf,minblocks,usesm) \
-    __global__ void kernel_general_box_async<_type,tile,halo,rf,minblocks,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
+    __global__ void kernel_general_box_async<_type,tile,halo,rf,minblocks,usesm>(_type*,int,int,_type*,_type*,_type*,int, int);
 
 
 #include "../perksconfig.cuh"
@@ -296,14 +296,14 @@ template<class REAL, int LOCAL_TILE_Y, int halo,
           int registeramount, bool UseSMCache, bool isstar=(isBOX==0),
           int minblocks=256/registeramount>
 __global__ void  kernel_general_wrapper
-(REAL * __restrict__ input, int width_y, int width_x, 
-  REAL * __restrict__ __var_4__, 
-  REAL * __restrict__ l2_cache_o,REAL * __restrict__ l2_cache_i,
+(REAL *  input, int width_y, int width_x, 
+  REAL *  __var_4__, 
+  REAL *  l2_cache_o,REAL *  l2_cache_i,
   int iteration,
   int max_sm_flder);
 
 #define PERKS_DECLARE_INITIONIZATION_GENERAL_WRAPPER(_type,tile,halo,ramount,usesm) \
-    __global__ void kernel_general_wrapper<_type,tile,halo,ramount,usesm>(_type*__restrict__,int,int,_type*__restrict__,_type*__restrict__,_type*__restrict__,int, int);
+    __global__ void kernel_general_wrapper<_type,tile,halo,ramount,usesm>(_type*,int,int,_type*,_type*,_type*,int, int);
 
 
 
