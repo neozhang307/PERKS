@@ -11,3 +11,5 @@ Explanation of how to run stencil solver is in:
 
 ./stencil/3dstencil/README.md
 
+You can compile code with config.sh and then build.sh in the ./conjugateGradient, ./stencil/2dstencil and ./stencil/3dstencil folders.
+The executable will be in ./build/init folders. 
