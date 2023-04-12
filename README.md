@@ -13,3 +13,8 @@ stencil/3dstencil/README.md
 
 You can compile code with config.sh and then build.sh in the ./conjugateGradient, ./stencil/2dstencil and ./stencil/3dstencil folders.
 The executable will be in ./build/init folders. 
+
+## Acknowledge
+stencil used some code from the following repository:
+- Unit test & data generation: https://github.com/pssrawat/IEEE2017
+- Shared memory optimizations: https://github.com/naoyam/benchmarks
